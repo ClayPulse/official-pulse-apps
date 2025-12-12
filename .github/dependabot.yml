@@ -8,26 +8,11 @@ updates:
     directories:
       - "/**"
     allow:
-      - dependency-name: "@pulse-editor/shared-utils"
-    versioning-strategy: increase
-    schedule:
-      interval: "daily"
-  - package-ecosystem: "npm"
-    directories:
-      - "/**"
-    allow:
-      - dependency-name: "@pulse-editor/react-api"
-    versioning-strategy: increase
-    schedule:
-      interval: "daily"
-  - package-ecosystem: "npm"
-    directories:
-      - "/**"
-    allow:
-      - dependency-name: "@pulse-editor/cli"
+      - dependency-name: "@pulse-editor/shared-utils@beta"
+      - dependency-name: "@pulse-editor/react-api@beta"
+      - dependency-name: "@pulse-editor/cli@beta"
         dependency-type: development
     versioning-strategy: increase
     schedule:
       interval: "daily"
-
-    
+      
