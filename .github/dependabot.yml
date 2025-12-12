@@ -5,7 +5,13 @@
 
 version: 2
 updates:
-  - package-ecosystem: "npm" # See documentation for possible values
-    directory: "/*" # Location of package manifests
+  - package-ecosystem: "npm"
+    directories:
+      - "/**"
+    allow:
+      - dependency-name: "@pulse-editor/shared-utils"
+      - dependency-name: "@pulse-editor/react-api"
+      - dependency-name: "@pulse-editor/cli"
+        dependency-type: development
     schedule:
       interval: "daily"
