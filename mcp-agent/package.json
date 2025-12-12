@@ -19,7 +19,7 @@
     "@heroui/react": "^2.8.5",
     "@langchain/mcp-adapters": "^1.0.0",
     "@langchain/openai": "^1.1.0",
-    "@pulse-editor/react-api": "^0.1.1-beta.62",
+    "@pulse-editor/react-api": "^0.1.1-beta.65",
     "@pulse-editor/shared-utils": "^0.1.1-beta.65",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
