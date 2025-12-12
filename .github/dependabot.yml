@@ -6,7 +6,7 @@ version: 2
 updates:
   - package-ecosystem: "npm"
     directories:
-      - "/**"
+      - "/*"
     allow:
       - dependency-name: "@pulse-editor/shared-utils"
       - dependency-name: "@pulse-editor/react-api"
