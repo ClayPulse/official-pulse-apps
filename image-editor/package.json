@@ -15,11 +15,12 @@
   "dependencies": {
     "@heroui/react": "^2.8.0-beta.5",
     "@heroui/theme": "^2.4.16-beta.2",
-    "@module-federation/enhanced": "^0.13.0",
-    "@pulse-editor/react-api": "^0.1.1-alpha.17",
-    "@pulse-editor/shared-utils": "^0.1.1-alpha.17",
+    "@module-federation/enhanced": "^0.21.6",
+    "@module-federation/node": "^2.7.25",
+    "@module-federation/runtime": "^0.21.6",
+    "@pulse-editor/react-api": "^0.1.1-beta.65",
+    "@pulse-editor/shared-utils": "^0.1.1-beta.65",
     "cors": "^2.8.5",
-    "express": "^5.1.0",
     "html-webpack-plugin": "^5.6.3",
     "material-icons": "^1.13.14",
     "next-themes": "^0.4.6",
@@ -27,6 +28,7 @@
     "react-dom": "^19.1.0"
   },
   "devDependencies": {
+    "@pulse-editor/cli": "^0.1.1-beta.16",
     "@tailwindcss/postcss": "^4.1.4",
     "@types/react": "^19.1.2",
     "@types/react-dom": "^19.1.2",
