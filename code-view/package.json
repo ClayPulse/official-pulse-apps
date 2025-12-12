@@ -22,7 +22,7 @@
     "@codemirror/lang-json": "^6.0.1",
     "@codemirror/lang-markdown": "^6.3.2",
     "@codemirror/lang-python": "^6.2.1",
-    "@pulse-editor/react-api": "^0.1.1-beta.62",
+    "@pulse-editor/react-api": "^0.1.1-beta.65",
     "@pulse-editor/shared-utils": "^0.1.1-beta.62",
     "@uiw/codemirror-theme-vscode": "^4.23.12",
     "@uiw/react-codemirror": "^4.23.12",
