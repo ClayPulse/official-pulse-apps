@@ -2,7 +2,7 @@
   "name": "opencut_editor",
   "displayName": "OpenCut Video Editor",
   "description": "A web based video editor powered by OpenCut",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "license": "MIT",
   "private": true,
   "type": "module",

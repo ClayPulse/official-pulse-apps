@@ -2,7 +2,7 @@
   "name": "mcp_server_connection",
   "displayName": "MCP Server Connection",
   "description": "A template for creating Pulse App",
-  "version": "0.0.13",
+  "version": "0.0.14",
   "private": true,
   "type": "module",
   "scripts": {

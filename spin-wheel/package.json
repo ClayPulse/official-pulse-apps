@@ -2,7 +2,7 @@
   "name": "spin_wheel",
   "displayName": "Spin Wheel",
   "description": "A simple spin wheel for Pulse Editor.",
-  "version": "0.0.28",
+  "version": "0.0.29",
   "private": true,
   "type": "module",
   "scripts": {

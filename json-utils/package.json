@@ -2,7 +2,7 @@
   "name": "json_utils",
   "displayName": "JSON Utils",
   "description": "Utility functions for working with JSON data in Pulse Editor.",
-  "version": "0.0.9",
+  "version": "0.0.10",
   "private": true,
   "type": "module",
   "scripts": {

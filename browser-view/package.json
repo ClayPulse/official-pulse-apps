@@ -2,7 +2,7 @@
   "name": "browser_view",
   "displayName": "Browser View",
   "description": "A mini browser view to display web content within the Pulse Editor.",
-  "version": "0.0.18",
+  "version": "0.0.19",
   "private": true,
   "type": "module",
   "scripts": {
