@@ -1,4 +1,4 @@
-import { AppConfig, AppTypeEnum } from "@pulse-editor/shared-utils";
+import { AppConfig } from "@pulse-editor/shared-utils";
 import packageJson from "./package.json" with { type: "json" };
 import { preRegisteredActions } from "./src/actions";
 
@@ -14,7 +14,6 @@ const config: AppConfig = {
   libVersion: packageJson.dependencies["@pulse-editor/shared-utils"],
   displayName: packageJson.displayName,
   description: packageJson.description,
-  appType: AppTypeEnum.FileView,
   fileTypes: [],
   visibility: "public",
   preRegisteredActions: Object.values(preRegisteredActions),

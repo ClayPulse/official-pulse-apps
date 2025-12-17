@@ -1,9 +1,9 @@
 import React, { useState } from "react";
-import { useRegisterAction, useWorkspace } from "@pulse-editor/react-api";
+import { useRegisterAction, useWorkspaceInfo } from "@pulse-editor/react-api";
 import { preRegisteredActions } from "../../preregistered-actions";
 
 export default function Browser() {
-  const { workspaceId } = useWorkspace();
+  const { workspaceId } = useWorkspaceInfo();
 
   const [uri, setUri] = useState("");
 

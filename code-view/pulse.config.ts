@@ -1,4 +1,4 @@
-import { AppConfig, AppTypeEnum } from "@pulse-editor/shared-utils";
+import { AppConfig } from "@pulse-editor/shared-utils";
 import packageJson from "./package.json" with { type: "json" };
 import { preRegisteredActions } from "./pregistered-actions";
 import { inlineSuggestionAgent } from "./src/lib/agents/inline-suggestion-agent";
@@ -17,7 +17,6 @@ const config: AppConfig = {
   libVersion: packageJson.dependencies["@pulse-editor/shared-utils"],
   displayName: packageJson.displayName,
   description: packageJson.description,
-  appType: AppTypeEnum.FileView,
   visibility: "public",
   recommendedHeight: 360,
   recommendedWidth: 640,

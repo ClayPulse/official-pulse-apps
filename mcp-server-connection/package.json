@@ -2,7 +2,7 @@
   "name": "mcp_server_connection",
   "displayName": "MCP Server Connection",
   "description": "A template for creating Pulse App",
-  "version": "0.0.11",
+  "version": "0.0.13",
   "private": true,
   "type": "module",
   "scripts": {
@@ -16,29 +16,25 @@
     "clean": "pulse clean"
   },
   "dependencies": {
-    "@pulse-editor/react-api": "^0.1.1-beta.66",
-    "@pulse-editor/shared-utils": "^0.1.1-beta.66",
+    "@pulse-editor/react-api": "^0.1.1-beta.68",
+    "@pulse-editor/shared-utils": "^0.1.1-beta.68",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
-    "html-webpack-plugin": "^5.6.4",
     "react": "19.2.3",
     "react-dom": "19.2.3"
   },
   "devDependencies": {
     "@module-federation/enhanced": "^0.21.6",
-    "@module-federation/node": "^2.7.25",
     "@module-federation/runtime": "^0.21.6",
-    "@pulse-editor/cli": "^0.1.1-beta.17",
+    "@pulse-editor/cli": "^0.1.1-beta.20",
     "@tailwindcss/postcss": "^4.1.14",
     "@types/cors": "^2.8.19",
     "@types/react": "19.2.2",
     "@types/react-dom": "19.2.2",
-    "copy-webpack-plugin": "^13.0.1",
     "cross-env": "^10.1.0",
     "css-loader": "^7.1.2",
     "eslint": "^9.37.0",
     "eslint-plugin-react": "^7.37.5",
-    "mini-css-extract-plugin": "^2.9.4",
     "postcss": "^8.5.6",
     "postcss-loader": "^8.2.0",
     "rimraf": "^6.0.1",
@@ -47,10 +43,7 @@
     "ts-loader": "^9.5.4",
     "tsx": "^4.20.6",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.46.1",
-    "webpack": "^5.102.1",
-    "webpack-cli": "^6.0.1",
-    "webpack-dev-server": "^5.2.2"
+    "typescript-eslint": "^8.46.1"
   },
   "pulse-editor-marketplace": {
     "visibility": "public"
