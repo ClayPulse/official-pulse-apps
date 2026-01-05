@@ -1,30 +1,20 @@
 import React, { useState } from "react";
-import { useRegisterAction, useWorkspaceInfo } from "@pulse-editor/react-api";
+import { useRegisterAction } from "@pulse-editor/react-api";
 import { preRegisteredActions } from "../../preregistered-actions";
 
 export default function Browser() {
-  const { workspaceId } = useWorkspaceInfo();
-
   const [uri, setUri] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
 
   // Register command
   useRegisterAction(
     preRegisteredActions["web-browse"],
     async ({ url }: { url: string }) => {
       setUri(() => encodeURIComponent(url));
+      setReloadKey((k) => k + 1);
       return;
     },
     [uri]
-  );
-
-  useRegisterAction(
-    preRegisteredActions["pulse-app-dev-preview"],
-    async () => {
-      setUri(() =>
-        workspaceId ? `https://${workspaceId}.workspace.pulse-editor.com` : ""
-      );
-    },
-    [workspaceId]
   );
 
   return (
@@ -44,6 +34,14 @@ export default function Browser() {
               }
             }}
           />
+          <button
+            className="border border-gray-300 rounded-sm px-3 py-1 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600"
+            onClick={() => setReloadKey((k) => k + 1)}
+            disabled={uri === ""}
+            title="Refresh"
+          >
+            ⟳
+          </button>
         </div>
         <div className="w-full h-full rounded-sm overflow-hidden">
           {uri !== "" ? (
@@ -51,6 +49,7 @@ export default function Browser() {
               className="w-full h-full"
               title="proxy-frame"
               src={decodeURIComponent(uri)}
+              key={reloadKey}
               style={{ width: "100%", height: "90vh", border: "none" }}
             ></iframe>
           ) : (
