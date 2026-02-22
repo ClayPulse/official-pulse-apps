@@ -8,13 +8,13 @@
   "type": "module",
   "scripts": {
     "lint": "eslint .",
-    "dev": "npm run clean && cross-env NODE_OPTIONS='--import=tsx' NODE_ENV=development concurrently --prefix none \"webpack --mode development --watch\" \"tsx watch --clear-screen=false express.ts\"",
-    "build": "npm run clean && cross-env NODE_OPTIONS='--import=tsx' webpack --mode production",
-    "build-client": "npm run clean && cross-env NODE_OPTIONS='--import=tsx' BUILD_TARGET=client webpack --mode production",
-    "build-server": "npm run clean && cross-env NODE_OPTIONS='--import=tsx' BUILD_TARGET=server webpack --mode production",
-    "start": "cross-env NODE_OPTIONS='--import=tsx' tsx express.ts",
-    "preview": "npm run clean && cross-env NODE_OPTIONS='--import=tsx' PREVIEW=true concurrently --prefix none \"webpack --mode development --watch\" \"tsx watch --clear-screen=false express.ts\"",
-    "clean": "rimraf dist"
+    "dev": "pulse dev",
+    "build": "pulse build",
+    "build-client": "pulse build --target client",
+    "build-server": "pulse build --target server",
+    "start": "pulse start",
+    "preview": "pulse preview",
+    "clean": "pulse clean"
   },
   "dependencies": {
     "@pulse-editor/react-api": "^0.1.1-beta.74",
