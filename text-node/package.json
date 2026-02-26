@@ -2,7 +2,7 @@
   "name": "pulse_editor_text_node",
   "displayName": "Text Node",
   "description": "A simple text node for Pulse Editor.",
-  "version": "0.0.13",
+  "version": "0.0.15",
   "private": true,
   "type": "module",
   "scripts": {
@@ -16,8 +16,8 @@
     "clean": "pulse clean"
   },
   "dependencies": {
-    "@pulse-editor/react-api": "^0.1.1-beta.74",
-    "@pulse-editor/shared-utils": "^0.1.1-beta.74",
+    "@pulse-editor/react-api": "^0.1.1-beta.80",
+    "@pulse-editor/shared-utils": "^0.1.1-beta.80",
     "cors": "^2.8.6",
     "dotenv": "^17.3.1",
     "react": "19.2.4",
@@ -26,7 +26,7 @@
   "devDependencies": {
     "@module-federation/enhanced": "^2.0.1",
     "@module-federation/runtime": "^2.0.1",
-    "@pulse-editor/cli": "^0.1.1-beta.33",
+    "@pulse-editor/cli": "^0.1.1-beta.37",
     "@tailwindcss/postcss": "^4.2.0",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",

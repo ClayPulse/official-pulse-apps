@@ -1,38 +1,49 @@
 import React, { useEffect, useState } from "react";
 import "./tailwind.css";
-import { useLoading, useRegisterAction } from "@pulse-editor/react-api";
-import { preRegisteredActions } from "../pregistered-actions";
+import { useLoading, useActionEffect } from "@pulse-editor/react-api";
 
 export default function Main() {
   const { isReady, toggleLoading } = useLoading();
 
   const [input, setInput] = useState("");
 
-  useRegisterAction(
-    preRegisteredActions["input-text"],
-    async (args) => {
-      const text = args["text"] as string;
-      setInput(text);
+  useActionEffect(
+    {
+      actionName: "inputText",
+      beforeAction: async (args: { text?: string }) => {
+        console.log("Received inputText action with input:", args.text);
+        setInput(args.text ?? "");
+
+        return args;
+      },
     },
-    [setInput]
+    [setInput],
   );
 
-  useRegisterAction(
-    preRegisteredActions["output-text"],
-    async () => {
-      return { text: input };
+  useActionEffect(
+    {
+      actionName: "outputText",
+      // Output the text from UI to the action output
+      afterAction: async () => {
+        return { text: input };
+      },
     },
-    [input]
+    [input],
   );
 
-  useRegisterAction(
-    preRegisteredActions["input-output-text"],
-    async (args) => {
-      const inputText = args["input-text"] as string;
-      setInput(inputText);
-      return { "output-text": inputText };
+  useActionEffect(
+    {
+      actionName: "inputOutputText",
+      beforeAction: async (args: { [x: string]: string }) => {
+        const inputText = args["input-text"] ?? "";
+        setInput(inputText);
+        return args;
+      },
+      afterAction(result) {
+        return result;
+      },
     },
-    [setInput]
+    [setInput],
   );
 
   useEffect(() => {
