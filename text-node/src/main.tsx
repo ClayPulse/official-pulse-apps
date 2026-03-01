@@ -34,13 +34,12 @@ export default function Main() {
   useActionEffect(
     {
       actionName: "inputOutputText",
-      beforeAction: async (args: { [x: string]: string }) => {
-        const inputText = args["input-text"] ?? "";
-        setInput(inputText);
-        return args;
-      },
-      afterAction(result) {
-        return result;
+      beforeAction: async (args: { "input-text": string }) => {
+        const text = args["input-text"] ?? input;
+        setInput(text);
+        return {
+          "input-text": text
+        };
       },
     },
     [setInput],

@@ -2,7 +2,7 @@
   "name": "pulse_editor_text_node",
   "displayName": "Text Node",
   "description": "A simple text node for Pulse Editor.",
-  "version": "0.0.16",
+  "version": "0.0.17",
   "private": true,
   "type": "module",
   "scripts": {
