@@ -2,7 +2,7 @@
   "name": "pulse_editor_text_node",
   "displayName": "Text Node",
   "description": "A simple text node for Pulse Editor.",
-  "version": "0.0.20",
+  "version": "0.0.22",
   "private": true,
   "type": "module",
   "scripts": {
@@ -26,7 +26,7 @@
   "devDependencies": {
     "@module-federation/enhanced": "^2.0.1",
     "@module-federation/runtime": "^2.0.1",
-    "@pulse-editor/cli": "^0.1.1-beta.37",
+    "@pulse-editor/cli": "^0.1.3",
     "@tailwindcss/postcss": "^4.2.0",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",

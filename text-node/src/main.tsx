@@ -9,9 +9,9 @@ export default function Main() {
 
   useActionEffect(
     {
-      actionName: "inputText",
+      actionName: "input-text",
       beforeAction: async (args: { text?: string }) => {
-        console.log("Received inputText action with input:", args.text);
+        console.log("Received input-text action with input:", args.text);
         setInput(args.text ?? "");
 
         return args;
@@ -22,7 +22,7 @@ export default function Main() {
 
   useActionEffect(
     {
-      actionName: "outputText",
+      actionName: "output-text",
       // Output the text from UI to the action output
       afterAction: async () => {
         return { text: input };
@@ -33,7 +33,7 @@ export default function Main() {
 
   useActionEffect(
     {
-      actionName: "inputOutputText",
+      actionName: "input-output-text",
       beforeAction: async (args: { "input-text": string }) => {
         const text = input.length > 0 ? input : args["input-text"];
         setInput(text);

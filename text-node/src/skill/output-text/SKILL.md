@@ -7,4 +7,4 @@ description: Returns the current text from the text node editor.
 This skill reads and outputs the current text displayed in the text node editor UI.
 
 ## What this skill does
-This skill defines an App Action called `outputText` that returns the current text content as `{ text: string }`.
+This skill defines an App Action called `output-text` that returns the current text content as `{ text: string }`.
