@@ -1,6 +1,5 @@
 import type { AppConfig } from "@pulse-editor/shared-utils";
 import packageJson from "./package.json" with { type: "json" };
-import { preRegisteredActions } from "./preregistered-actions";
 
 /**
  * Pulse Editor Extension Config
@@ -17,8 +16,7 @@ const config: AppConfig = {
   visibility: 'public',
   recommendedHeight: 640,
   recommendedWidth: 360,
-  thumbnail: "assets/thumbnail.png",
-  preRegisteredActions: Object.values(preRegisteredActions),
+  thumbnail: "assets/thumbnail.png"
 };
 
 export default config;
