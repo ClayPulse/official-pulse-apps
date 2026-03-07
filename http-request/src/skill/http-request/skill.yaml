@@ -1,0 +1,89 @@
+---
+name: http-request
+description: |
+  Send configurable outbound HTTP requests (GET, POST, PUT, DELETE, PATCH, etc.)
+  with URL params, headers, and body from Pulse Editor.
+version: 0.0.1
+author: pulse-app
+tags:
+  - http
+  - api
+  - networking
+  - integration
+input_schema:
+  type: object
+  properties:
+    method:
+      type: string
+      description: HTTP method to use.
+      enum:
+        - GET
+        - POST
+        - PUT
+        - PATCH
+        - DELETE
+        - HEAD
+        - OPTIONS
+      default: GET
+    url:
+      type: string
+      description: Fully-qualified URL (including query string if needed).
+    queryParams:
+      type: object
+      description: Optional query string parameters to append to the URL.
+      additionalProperties:
+        type:
+          - string
+          - number
+          - boolean
+    headers:
+      type: object
+      description: Optional HTTP headers to send with the request.
+      additionalProperties:
+        type: string
+    body:
+      description: Optional request body. Usually JSON for POST/PUT/PATCH.
+      oneOf:
+        - type: object
+        - type: array
+        - type: string
+    timeoutMs:
+      type: number
+      description: Optional timeout in milliseconds.
+  required:
+    - method
+    - url
+output_schema:
+  type: object
+  properties:
+    status:
+      type: number
+      description: HTTP status code from the response.
+    statusText:
+      type: string
+      description: HTTP status text from the response.
+    headers:
+      type: object
+      description: Response headers as a key-value map.
+    data:
+      description: Parsed response body if JSON, otherwise text.
+    rawText:
+      type: string
+      description: Raw response text (for debugging / non-JSON responses).
+    requestSummary:
+      type: object
+      description: Echo of the original request configuration.
+  required:
+    - status
+    - statusText
+    - headers
+    - requestSummary
+---
+You are a utility skill that performs outbound HTTP calls.
+Use this when the user wants to call an external API endpoint,
+send webhooks, or otherwise perform HTTP operations.
+
+- Validate the method, url, and parameters.
+- Prefer JSON bodies and "application/json" headers when appropriate.
+- Do not send any secrets unless they are explicitly provided in the input.
+- Return both parsed JSON (if possible) and raw text for flexibility.
