@@ -11,23 +11,50 @@ export default async function agent(req: Request) {
     return new Response("Method Not Allowed", { status: 405 });
   }
 
-  const {
-    userMessage,
-    llmModel,
-  }: {
-    userMessage: string;
-    llmModel: string;
-  } = await req.json();
+  try {
+    const {
+      prompt,
+      llmModel,
+    }: {
+      prompt: string;
+      llmModel: string;
+    } = await req.json();
 
-  const model = new ChatOpenAI({
-    model: llmModel,
-    temperature: 0.95,
-    apiKey: process.env.OPENAI_API_KEY,
-  });
+    if (!process.env.OPENAI_API_KEY) {
+      return Response.json(
+        {
+          error:
+            "OPENAI_API_KEY is missing. Add it to your environment and try again.",
+        },
+        { status: 500 },
+      );
+    }
 
-  const resultStream = await model.stream(userMessage);
+    const model = new ChatOpenAI({
+      model: llmModel,
+      apiKey: process.env.OPENAI_API_KEY,
+    });
 
-  return new Response(resultStream, {
-    headers: { "Content-Type": "application/json" },
-  });
+    const llmStream = await model.stream(prompt);
+
+    const stream = new ReadableStream({
+      async start(controller) {
+        for await (const chunk of llmStream) {
+          const text = chunk.text;
+          const encoder = new TextEncoder();
+          controller.enqueue(encoder.encode(text));
+        }
+        controller.close();
+      },
+    });
+
+    return new Response(stream, {
+      headers: { "Content-Type": "application/json" },
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "LLM request failed.";
+
+    return Response.json({ error: message }, { status: 500 });
+  }
 }

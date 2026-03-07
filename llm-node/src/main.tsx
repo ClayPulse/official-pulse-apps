@@ -13,6 +13,18 @@ export default function Main() {
   const llmModelRef = useRef<LlmModel>(LLM_MODELS[0]);
   const [isLoading, setIsLoading] = useState(false);
 
+  const getErrorMessage = (error: unknown): string => {
+    if (error instanceof Error && error.message) {
+      return error.message;
+    }
+
+    if (typeof error === "string" && error) {
+      return error;
+    }
+
+    return "Failed to run LLM request.";
+  };
+
   useEffect(() => {
     if (isReady) {
       toggleLoading(false);
@@ -22,13 +34,13 @@ export default function Main() {
   const { runAppAction } = useActionEffect(
     {
       actionName: "run-llm",
-      beforeAction: (input) => {
-        setPrompt(input);
+      beforeAction: async (input) => {
+        setPrompt(input.prompt);
         return { ...input, llmModel: llmModelRef.current };
       },
-      afterAction: (output) => {
+      afterAction: async (output) => {
         if (output) {
-          setResult(output.response ?? "");
+          setResult(() => output.response ?? "");
           return output;
         }
       },
@@ -37,11 +49,11 @@ export default function Main() {
   );
 
   return (
-    <div className="p-2 flex flex-col w-full h-full overflow-auto">
+    <div className="p-2 flex flex-col w-full h-full overflow-auto text-gray-900 dark:text-gray-100">
       <div className="flex items-center gap-x-1">
         GitHub:
         <button
-          className="w-8 h-8 border border-gray-300 rounded-full p-1 hover:bg-gray-100"
+          className="w-8 h-8 border border-gray-300 dark:border-gray-600 rounded-full p-1 hover:bg-gray-100 dark:hover:bg-gray-800"
           onClick={() => {
             window.open(
               "https://github.com/claypulse/official-pulse-apps",
@@ -74,7 +86,7 @@ export default function Main() {
             llmModelRef.current = m;
             setLlmModel(m);
           }}
-          className="border border-gray-300 rounded px-2 py-1 text-sm bg-white"
+          className="border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
         >
           {LLM_MODELS.map((m) => (
             <option key={m} value={m}>
@@ -96,27 +108,35 @@ export default function Main() {
           onKeyDown={async (e) => {
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
-              alert(runAppAction);
               // Trigger the action by dispatching a custom event
               if (runAppAction) {
                 setIsLoading(true);
-                await runAppAction({
-                  actionName: "run-llm",
-                });
-                setIsLoading(false);
+                try {
+                  const response = await runAppAction({
+                    prompt,
+                    llmModel: llmModelRef.current,
+                  });
+                  setResult(response?.response ?? "");
+                } catch (error) {
+                  setResult(getErrorMessage(error));
+                } finally {
+                  setIsLoading(false);
+                }
               }
             }
           }}
-          className="border border-gray-300 rounded px-2 py-1 text-sm bg-white"
+          className="border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
         />
       </div>
 
       {isLoading && (
-        <div className="mt-2 p-2 bg-gray-100 rounded text-sm">Loading...</div>
+        <div className="mt-2 p-2 bg-gray-100 dark:bg-gray-800 rounded text-sm text-gray-900 dark:text-gray-100">
+          Loading...
+        </div>
       )}
 
       {result && !isLoading && (
-        <div className="mt-2 p-2 bg-gray-100 rounded text-sm whitespace-pre-wrap">
+        <div className="mt-2 p-2 bg-gray-100 dark:bg-gray-800 rounded text-sm whitespace-pre-wrap text-gray-900 dark:text-gray-100">
           {result}
         </div>
       )}
