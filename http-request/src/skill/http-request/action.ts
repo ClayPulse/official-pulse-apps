@@ -1,5 +1,3 @@
-import axios, { AxiosRequestConfig, Method } from "axios";
-
 /**
  * @typedef {Object} Input
  * @property {("GET"|"POST"|"PUT"|"PATCH"|"DELETE"|"HEAD"|"OPTIONS")} method - HTTP method to use.
@@ -10,7 +8,7 @@ import axios, { AxiosRequestConfig, Method } from "axios";
  * @property {number} [timeoutMs] - Optional timeout in milliseconds.
  */
 type Input = {
-  method: Method;
+  method: string;
   url: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   queryParams?: Record<string, string | number | boolean>;
@@ -53,112 +51,30 @@ type Output = {
 };
 
 /**
- * Perform an outbound HTTP request to an arbitrary URL.
- *
- * This action supports:
- * - Configurable HTTP methods (GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS).
- * - Optional query string parameters.
- * - Optional headers.
- * - Optional JSON/text body.
- * - Optional timeout.
- *
- * The function attempts to parse JSON responses, but always returns the raw
- * response text for maximum flexibility.
+ * Perform an outbound HTTP request to an arbitrary URL via the server-function.
  *
  * @param {Input} input - The HTTP request configuration.
  * @returns {Promise<Output>} Response metadata and body.
  */
 export default async function httpRequest(input: Input): Promise<Output> {
-  const {
-    method,
-    url,
-    queryParams,
-    headers = {},
-    body,
-    timeoutMs,
-  } = input;
+  const response = await fetch("/server-function/http-request", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
 
-  // Basic validation at runtime for safer usage from agents / UI.
-  if (!url || typeof url !== "string") {
-    return {
-      status: null,
-      statusText: "Invalid URL",
-      headers: {},
-      requestSummary: {
-        method: method || "GET",
-        url: url || "",
-        queryParams,
-        headers,
-        body,
-      },
-    };
-  }
-
-  const normalizedMethod = (method || "GET").toUpperCase() as Method;
-
-  const config: AxiosRequestConfig = {
-    method: normalizedMethod,
-    url,
-    params: queryParams,
-    headers,
-    data: body,
-    timeout: timeoutMs,
-    // Keep response as text so we can attempt JSON parsing manually.
-    responseType: "text",
-    validateStatus: () => true, // We want to capture non-2xx as well.
-  };
-
-  try {
-    const response = await axios<string>(config);
-
-    const responseHeaders: Record<string, string> = {};
-    for (const [key, value] of Object.entries(response.headers || {})) {
-      responseHeaders[key] = Array.isArray(value) ? value.join(", ") : String(value);
-    }
-
-    let parsedData: unknown = undefined;
-    let rawText: string | undefined = response.data;
-
-    if (typeof rawText === "string") {
-      // Try to parse JSON, but don't fail if it's not JSON.
-      try {
-        parsedData = JSON.parse(rawText);
-      } catch {
-        // Not JSON; leave parsedData as undefined and keep rawText.
+  if (!response.ok) {
+    let message = `Request failed: ${response.status}`;
+    try {
+      const errorPayload = (await response.json()) as { statusText?: string };
+      if (errorPayload?.statusText) {
+        message = errorPayload.statusText;
       }
-    } else {
-      parsedData = response.data;
+    } catch {
+      // ignore
     }
-
-    return {
-      status: response.status ?? null,
-      statusText: response.statusText,
-      headers: responseHeaders,
-      data: parsedData,
-      rawText,
-      requestSummary: {
-        method: normalizedMethod,
-        url: response.request?.res?.responseUrl ?? url,
-        queryParams,
-        headers,
-        body,
-      },
-    };
-  } catch (error: unknown) {
-    const message =
-      error instanceof Error ? error.message : "Unknown network error";
-
-    return {
-      status: null,
-      statusText: message,
-      headers: {},
-      requestSummary: {
-        method: normalizedMethod,
-        url,
-        queryParams,
-        headers,
-        body,
-      },
-    };
+    throw new Error(message);
   }
+
+  return (await response.json()) as Output;
 }

@@ -180,7 +180,41 @@ export default function HttpRequestNode() {
       timeoutMs: timeout,
     };
 
-    await runAppAction(input);
+    try {
+      setIsSending(true);
+      setResponseStatus("Sending request...");
+      setResponsePreview("");
+
+      const result = await runAppAction(input);
+
+      setIsSending(false);
+      if (!result) {
+        setResponseStatus("No response");
+        return;
+      }
+
+      const status = result.status ?? "Network error";
+      const statusText = result.statusText ?? "";
+      setResponseStatus(`${status} ${statusText}`);
+
+      try {
+        if (result.data !== undefined) {
+          setResponsePreview(JSON.stringify(result.data, null, 2));
+        } else if (typeof result.rawText === "string") {
+          setResponsePreview(result.rawText);
+        } else {
+          setResponsePreview(JSON.stringify(result, null, 2));
+        }
+      } catch {
+        setResponsePreview(JSON.stringify(result, null, 2));
+      }
+    } catch (error: unknown) {
+      setIsSending(false);
+      const message =
+        error instanceof Error ? error.message : "Request failed";
+      setResponseStatus("Error");
+      setResponsePreview(message);
+    }
   }
 
   return (
