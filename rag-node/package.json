@@ -2,7 +2,7 @@
   "name": "rag_node",
   "displayName": "rag-node",
   "description": "A template for creating Pulse App",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "private": true,
   "type": "module",
   "scripts": {
