@@ -1,16 +1,14 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import "./tailwind.css";
 import { useLoading, useActionEffect } from "@pulse-editor/react-api";
 
-const LLM_MODELS = ["gpt-5.4", "gpt-5-mini"] as const;
-type LlmModel = (typeof LLM_MODELS)[number];
+const LLM_MODELS = ["gpt-5.4", "gpt-5-mini"];
 
 export default function Main() {
   const { isReady, toggleLoading } = useLoading();
-  const [prompt, setPrompt] = useState<string>("");
+  const [llmPrompt, setLLMPrompt] = useState<string>("");
   const [result, setResult] = useState<string>("");
-  const [llmModel, setLlmModel] = useState<LlmModel>(LLM_MODELS[0]);
-  const llmModelRef = useRef<LlmModel>(LLM_MODELS[0]);
+  const [llmModel, setLlmModel] = useState<string>(LLM_MODELS[0]);
   const [isLoading, setIsLoading] = useState(false);
 
   const getErrorMessage = (error: unknown): string => {
@@ -35,8 +33,16 @@ export default function Main() {
     {
       actionName: "run-llm",
       beforeAction: async (input) => {
-        setPrompt(input.prompt);
-        return { ...input, llmModel: llmModelRef.current };
+        const prompt = input.prompt ?? llmPrompt;
+        setLLMPrompt(prompt);
+
+        const model = input.llmModel ?? llmModel;
+        setLlmModel(model);
+
+        return {
+          prompt,
+          llmModel: model,
+        };
       },
       afterAction: async (output) => {
         if (output) {
@@ -45,7 +51,7 @@ export default function Main() {
         }
       },
     },
-    [],
+    [llmModel, llmPrompt],
   );
 
   return (
@@ -82,17 +88,19 @@ export default function Main() {
           id="llm-model-select"
           value={llmModel}
           onChange={(e) => {
-            const m = e.target.value as LlmModel;
-            llmModelRef.current = m;
+            const m = e.target.value;
             setLlmModel(m);
           }}
           className="border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
         >
-          {LLM_MODELS.map((m) => (
-            <option key={m} value={m}>
-              {m}
-            </option>
-          ))}
+          {
+            // Add entered LLM as an option
+            [...new Set([llmModel, ...LLM_MODELS])].map((model) => (
+              <option key={model} value={model}>
+                {model}
+              </option>
+            ))
+          }
         </select>
       </div>
 
@@ -103,8 +111,8 @@ export default function Main() {
         </label>
         <textarea
           id="llm-input"
-          value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
+          value={llmPrompt}
+          onChange={(e) => setLLMPrompt(e.target.value)}
           onKeyDown={async (e) => {
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
@@ -113,8 +121,8 @@ export default function Main() {
                 setIsLoading(true);
                 try {
                   const response = await runAppAction({
-                    prompt,
-                    llmModel: llmModelRef.current,
+                    prompt: llmPrompt,
+                    llmModel: llmModel,
                   });
                   setResult(response?.response ?? "");
                 } catch (error) {
