@@ -1,13 +1,12 @@
 import { AppConfig } from "@pulse-editor/shared-utils";
 import packageJson from "./package.json" with { type: "json" };
-import { preRegisteredActions } from "./pregistered-actions";
 
 /**
  * Pulse Editor Extension Config
  *
  */
 const config: AppConfig = {
-  // Do not use hyphen character '-' in the id. 
+  // Do not use hyphen character '-' in the id.
   // The id should be the same as the package name in package.json.
   id: packageJson.name,
   version: packageJson.version,
@@ -18,7 +17,6 @@ const config: AppConfig = {
   recommendedHeight: 160,
   recommendedWidth: 300,
   thumbnail: "assets/thumbnail.png",
-  preRegisteredActions: Object.values(preRegisteredActions),
 };
 
 export default config;

@@ -1,7 +1,6 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect } from "react";
 import "./tailwind.css";
-import { useLoading, useRegisterAction } from "@pulse-editor/react-api";
-import { preRegisteredActions } from "../pregistered-actions";
+import { useLoading, useActionEffect } from "@pulse-editor/react-api";
 
 export default function Main() {
   const { isReady, toggleLoading } = useLoading();
@@ -12,26 +11,20 @@ export default function Main() {
     }
   }, [isReady, toggleLoading]);
 
-  useRegisterAction(
-    preRegisteredActions["parse-json"],
-    async (params) => {
-      const jsonString = params["string-value"] as string;
-      const parsedObject = JSON.parse(jsonString);
-      return {
-        "parsed-object": parsedObject,
-      };
+  useActionEffect(
+    {
+      actionName: "parse-json",
+      beforeAction: async (input) => input,
+      afterAction: async (output) => output,
     },
     []
   );
 
-  useRegisterAction(
-    preRegisteredActions["stringify-json"],
-    async (params) => {
-      const jsonObject = params["json-object"];
-      const jsonString = JSON.stringify(jsonObject, null, 2);
-      return {
-        "string-value": jsonString,
-      };
+  useActionEffect(
+    {
+      actionName: "stringify-json",
+      beforeAction: async (input) => input,
+      afterAction: async (output) => output,
     },
     []
   );
