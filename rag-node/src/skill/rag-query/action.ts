@@ -13,25 +13,11 @@ type Input = {
 };
 
 /**
- * @typedef {Object} Document - A matched document from the vector search.
- * @property {string} id - The document ID.
- * @property {number} score - The similarity score.
- * @property {Record<string, unknown>} metadata - The document metadata.
- * @property {string} text - The document text content.
- */
-type Document = {
-  id: string;
-  score: number;
-  metadata: Record<string, unknown>;
-  text: string;
-};
-
-/**
  * @typedef {Object} Output - The output of the RAG query action.
- * @property {Document[]} documents - The matched documents sorted by relevance.
+ * @property {string[]} documents - The matched document texts sorted by relevance.
  */
 type Output = {
-  documents: Document[];
+  documents: string[];
 };
 
 /**
@@ -55,3 +41,4 @@ export default async function ragQuery(input: Input): Promise<Output> {
 
   return response.json();
 }
+ 
