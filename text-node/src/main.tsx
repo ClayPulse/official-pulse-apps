@@ -1,65 +1,12 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import "./tailwind.css";
-import { useLoading, useActionEffect } from "@pulse-editor/react-api";
+import { SnapshotProvider } from "@pulse-editor/react-api";
+import { TextArea } from "./component/text-area";
 
 export default function Main() {
-  const { isReady, toggleLoading } = useLoading();
-
-  const [input, setInput] = useState("");
-
-  useActionEffect(
-    {
-      actionName: "input-text",
-      beforeAction: async (args: { text?: string }) => {
-        console.log("Received input-text action with input:", args.text);
-        setInput(args.text ?? "");
-
-        return args;
-      },
-    },
-    [setInput],
-  );
-
-  useActionEffect(
-    {
-      actionName: "output-text",
-      // Output the text from UI to the action output
-      afterAction: async () => {
-        return { text: input };
-      },
-    },
-    [input],
-  );
-
-  useActionEffect(
-    {
-      actionName: "input-output-text",
-      beforeAction: async (args: { "input-text": string }) => {
-        const text = input.length > 0 ? input : args["input-text"];
-        setInput(text);
-        return {
-          "input-text": text,
-        };
-      },
-    },
-    [setInput, input],
-  );
-
-  useEffect(() => {
-    if (isReady) {
-      toggleLoading(false);
-    }
-  }, [isReady, toggleLoading]);
-
   return (
-    <div className="flex flex-col w-full h-full">
-      {/* Make text input */}
-      <textarea
-        className="text-black bg-gray-100 dark:text-white dark:bg-gray-950 h-full w-full resize-none p-2 rounded-md"
-        placeholder="Type something..."
-        value={input}
-        onChange={(e) => setInput(e.target.value)}
-      />
-    </div>
+    <SnapshotProvider>
+      <TextArea />
+    </SnapshotProvider>
   );
 }
