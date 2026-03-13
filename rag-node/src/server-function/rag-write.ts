@@ -1,5 +1,5 @@
 import { Pinecone } from "@pinecone-database/pinecone";
-import { randomUUID } from "crypto";
+import { createHash } from "crypto";
 
 /**
  * Server function that writes a document to a Pinecone vector index.
@@ -32,9 +32,12 @@ export default async function ragWrite(req: Request) {
   const index = pc.index(indexName);
   const ns = namespace ? index.namespace(namespace) : index;
 
+  // eslint-disable-next-line no-control-regex
+  const cleanText = text.replace(/[\uD800-\uDFFF]|[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "");
+
   const record = {
-    _id: randomUUID(),
-    text: text,
+    _id: createHash("sha256").update(cleanText).digest("hex"),
+    text: cleanText,
   };
 
   await ns.upsertRecords({ records: [record] });

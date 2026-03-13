@@ -9,7 +9,7 @@ type Document = {
   text: string;
 };
 
-type Mode = "query" | "write";
+type Mode = "query" | "write" | "upload";
 
 
 export default function Main() {
@@ -33,6 +33,16 @@ export default function Main() {
   const [writeLoading, setWriteLoading] = useState(false);
   const [writeError, setWriteError] = useState("");
   const [writeSuccess, setWriteSuccess] = useState("");
+
+  // Upload state
+  const [uploadFiles, setUploadFiles] = useState<File[]>([]);
+  const [uploadIndexName, setUploadIndexName] = useState("");
+  const [uploadNamespace, setUploadNamespace] = useState("");
+  const [uploadLoading, setUploadLoading] = useState(false);
+  const [uploadError, setUploadError] = useState("");
+  const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number; currentFile: string } | null>(null);
+  const [uploadResults, setUploadResults] = useState<{ fileName: string; status: "success" | "error"; message: string }[]>([]);
+  const [isDragging, setIsDragging] = useState(false);
 
   useEffect(() => {
     if (isReady) {
@@ -97,6 +107,94 @@ export default function Main() {
     [],
   );
 
+  const { runAppAction: runUpload } = useActionEffect(
+    {
+      actionName: "rag-upload",
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      beforeAction: async (args: any) => {
+        if (args?.indexName) setUploadIndexName(args.indexName);
+        if (args?.namespace) setUploadNamespace(args.namespace);
+        setMode("upload");
+        setUploadLoading(true);
+        setUploadError("");
+        setUploadResults([]);
+        return args;
+      },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      afterAction: async (result: any) => {
+        setUploadLoading(false);
+        if (result?.error) {
+          setUploadError(result.error);
+        }
+        return result;
+      },
+    },
+    [],
+  );
+
+  const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result as string;
+        resolve(result.split(",")[1]);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleUpload = async () => {
+    if (!uploadFiles.length || !uploadIndexName || !runUpload) return;
+    setUploadLoading(true);
+    setUploadError("");
+    setUploadResults([]);
+    const results: { fileName: string; status: "success" | "error"; message: string }[] = [];
+
+    for (let i = 0; i < uploadFiles.length; i++) {
+      const file = uploadFiles[i];
+      setUploadProgress({ done: i, total: uploadFiles.length, currentFile: file.name });
+      try {
+        const fileBase64 = await fileToBase64(file);
+        const result = await runUpload({
+          fileBase64,
+          fileName: file.name,
+          indexName: uploadIndexName,
+          ...(uploadNamespace ? { namespace: uploadNamespace } : {}),
+        });
+        if (result?.error) {
+          results.push({ fileName: file.name, status: "error", message: result.error });
+        } else {
+          results.push({ fileName: file.name, status: "success", message: `${result.upsertedCount} chunk(s)` });
+        }
+      } catch (err) {
+        results.push({ fileName: file.name, status: "error", message: err instanceof Error ? err.message : "Failed" });
+      }
+      setUploadResults([...results]);
+    }
+
+    setUploadProgress(null);
+    setUploadLoading(false);
+    setUploadFiles([]);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length) setUploadFiles((prev) => [...prev, ...files]);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
   const handleQuery = async () => {
     if (!query || !indexName || !runQuery) return;
     setLoading(true);
@@ -159,6 +257,12 @@ export default function Main() {
           onClick={() => setMode("write")}
         >
           Write
+        </button>
+        <button
+          className={`py-1 px-3 rounded font-semibold text-sm ${mode === "upload" ? "bg-gray-800 text-white" : "bg-gray-200 text-gray-700"}`}
+          onClick={() => setMode("upload")}
+        >
+          Upload
         </button>
       </div>
 
@@ -275,6 +379,108 @@ export default function Main() {
 
           {writeError && <p className="text-red-500">{writeError}</p>}
           {writeSuccess && <p className="text-green-600">{writeSuccess}</p>}
+        </>
+      )}
+
+      {mode === "upload" && (
+        <>
+          <h1 className="text-lg font-bold">RAG Upload</h1>
+          <div className="flex flex-col gap-y-2">
+            <input
+              className="border border-gray-300 rounded p-2"
+              type="text"
+              placeholder="Index name"
+              value={uploadIndexName}
+              onChange={(e) => setUploadIndexName(e.target.value)}
+            />
+            <input
+              className="border border-gray-300 rounded p-2"
+              type="text"
+              placeholder="Namespace (optional)"
+              value={uploadNamespace}
+              onChange={(e) => setUploadNamespace(e.target.value)}
+            />
+            <div
+              className={`border-2 border-dashed rounded p-6 text-center cursor-pointer transition-colors ${
+                isDragging
+                  ? "border-blue-500 bg-blue-50"
+                  : uploadFiles.length > 0
+                    ? "border-green-400 bg-green-50"
+                    : "border-gray-300 hover:border-gray-400"
+              }`}
+              onDrop={handleDrop}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onClick={() => {
+                const input = document.createElement("input");
+                input.type = "file";
+                input.multiple = true;
+                input.accept = ".docx,.txt,.md,.csv,.json,.log,.xml,.html,.yml,.yaml";
+                input.onchange = (e) => {
+                  const files = Array.from((e.target as HTMLInputElement).files || []);
+                  if (files.length) setUploadFiles((prev) => [...prev, ...files]);
+                };
+                input.click();
+              }}
+            >
+              <div className="flex flex-col items-center gap-1">
+                <p className="text-sm text-gray-500">
+                  Drag & drop files here, or click to select
+                </p>
+                <p className="text-xs text-gray-400">
+                  Supports .docx, .txt, .md, .csv, .json, .log, .xml, .html, .yml
+                </p>
+              </div>
+            </div>
+            {uploadFiles.length > 0 && !uploadLoading && (
+              <div className="flex flex-col gap-y-1">
+                <p className="text-sm font-medium">{uploadFiles.length} file(s) selected</p>
+                {uploadFiles.map((file, i) => (
+                  <div key={i} className="flex items-center justify-between text-sm bg-gray-50 rounded px-2 py-1">
+                    <span>{file.name} <span className="text-gray-400">({(file.size / 1024).toFixed(1)} KB)</span></span>
+                    <button
+                      className="text-red-500 hover:text-red-700 text-xs ml-2"
+                      onClick={() => setUploadFiles((prev) => prev.filter((_, j) => j !== i))}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {uploadProgress && (
+              <div className="flex flex-col gap-y-1">
+                <div className="flex justify-between text-sm">
+                  <span>Uploading: {uploadProgress.currentFile}</span>
+                  <span>{uploadProgress.done}/{uploadProgress.total}</span>
+                </div>
+                <div className="w-full bg-gray-200 rounded h-2">
+                  <div
+                    className="bg-gray-800 h-2 rounded transition-all"
+                    style={{ width: `${(uploadProgress.done / uploadProgress.total) * 100}%` }}
+                  />
+                </div>
+              </div>
+            )}
+            <button
+              className="bg-gray-800 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded disabled:opacity-50"
+              onClick={handleUpload}
+              disabled={uploadLoading || !uploadIndexName || !uploadFiles.length}
+            >
+              {uploadLoading ? "Uploading..." : `Upload ${uploadFiles.length || ""} file(s) to Index`}
+            </button>
+          </div>
+
+          {uploadError && <p className="text-red-500">{uploadError}</p>}
+          {uploadResults.length > 0 && (
+            <div className="flex flex-col gap-y-1">
+              {uploadResults.map((r, i) => (
+                <p key={i} className={r.status === "success" ? "text-green-600 text-sm" : "text-red-500 text-sm"}>
+                  {r.fileName}: {r.message}
+                </p>
+              ))}
+            </div>
+          )}
         </>
       )}
     </div>
