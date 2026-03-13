@@ -8,10 +8,11 @@ type Input = {
 
 /**
  * @typedef {Object} Output - The output of the parse-json action.
- * @property {object} parsedObject - The parsed JSON object.
+ * @property {any} parsedObject - The parsed JSON object.
  */
 type Output = {
-  parsedObject: object;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  parsedObject: any;
 };
 
 /**

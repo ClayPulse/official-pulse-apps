@@ -29,6 +29,24 @@ export default function Main() {
     []
   );
 
+  useActionEffect(
+    {
+      actionName: "create-object",
+      beforeAction: async (input) => input,
+      afterAction: async (output) => output,
+    },
+    []
+  );
+
+  useActionEffect(
+    {
+      actionName: "merge-objects",
+      beforeAction: async (input) => input,
+      afterAction: async (output) => output,
+    },
+    []
+  );
+
   return (
     <div className="p-2 flex flex-col">
       <h1 className="text-2xl font-bold mb-4">Pulse App JSON Utils</h1>
@@ -38,6 +56,8 @@ export default function Main() {
         <ul className="list-disc list-inside">
           <li>Parse JSON string to JSON object</li>
           <li>Stringify JSON object to JSON string</li>
+          <li>Create JSON object from a key-value pair</li>
+          <li>Merge two JSON objects into one</li>
         </ul>
       </div>
     </div>

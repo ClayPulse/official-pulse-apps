@@ -1,9 +1,10 @@
 /**
  * @typedef {Object} Input - The input parameters for the stringify-json action.
- * @property {object} jsonObject - The JSON object to stringify.
+ * @property {any} jsonObject - The JSON object to stringify.
  */
 type Input = {
-  jsonObject: object;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  jsonObject: any;
 };
 
 /**
