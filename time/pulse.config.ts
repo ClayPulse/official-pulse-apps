@@ -1,0 +1,22 @@
+import type { AppConfig } from "@pulse-editor/shared-utils";
+import packageJson from "./package.json" with { type: "json" };
+
+/**
+ * Pulse Editor Extension Config
+ *
+ */
+const config: AppConfig = {
+  // Do not use hyphen character '-' in the id. 
+  // The id should be the same as the package name in package.json.
+  id: packageJson.name,
+  version: packageJson.version,
+  libVersion: packageJson.dependencies["@pulse-editor/shared-utils"],
+  displayName: packageJson.displayName,
+  description: packageJson.description,
+  visibility: 'public',
+  recommendedHeight: 480,
+  recommendedWidth: 300,
+  thumbnail: "assets/thumbnail.png",
+};
+
+export default config;
