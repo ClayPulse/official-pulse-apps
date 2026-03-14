@@ -1,61 +1,28 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import "./tailwind.css";
 import { useActionEffect, useLoading } from "@pulse-editor/react-api";
 
 type SearchStatus = "idle" | "searching" | "done" | "error";
+type Source = { url: string; title: string; page_age?: string };
 
 export default function Main() {
   const { isReady, toggleLoading } = useLoading();
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<SearchStatus>("idle");
   const [sitesSearched, setSitesSearched] = useState(0);
-  const [searchedUrls, setSearchedUrls] = useState<string[]>([]);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [sources, setSources] = useState<Source[]>([]);
   const [summary, setSummary] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
   const abortRef = useRef<AbortController | null>(null);
 
-  useEffect(() => {
-    if (isReady) toggleLoading(false);
-  }, [isReady, toggleLoading]);
-
-  useActionEffect(
-    {
-      actionName: "webSearch",
-      beforeAction: async (args) => {
-        abortRef.current?.abort();
-        abortRef.current = null;
-        setQuery(args.query ?? "");
-        setStatus("searching");
-        setSitesSearched(0);
-        setSearchedUrls([]);
-        setSummary("");
-        setErrorMsg("");
-      },
-      afterAction: async (results) => {
-        if (results.error) {
-          setErrorMsg(String(results.error));
-          setStatus("error");
-        } else {
-          setSummary(results.summary ?? "");
-          setSearchedUrls(results.urls ?? []);
-          setStatus("done");
-        }
-      },
-    },
-    [],
-  );
-
-  const handleSearch = async () => {
-    if (!query.trim() || status === "searching") return;
-
-    abortRef.current?.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
-
+  const startSearch = useCallback(async (searchQuery: string, signal?: AbortSignal) => {
     setStatus("searching");
     setSitesSearched(0);
-    setSearchedUrls([]);
+    setIsGenerating(false);
+    setSources([]);
     setSummary("");
     setErrorMsg("");
 
@@ -63,8 +30,8 @@ export default function Main() {
       const response = await fetch("/server-function/web-search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: query.trim() }),
-        signal: controller.signal,
+        body: JSON.stringify({ query: searchQuery.trim() }),
+        signal,
       });
 
       if (!response.ok || !response.body) {
@@ -85,21 +52,29 @@ export default function Main() {
 
         for (const line of lines) {
           if (!line.startsWith("data: ")) continue;
+          let data: Record<string, unknown>;
           try {
-            const data = JSON.parse(line.slice(6));
-            if (data.type === "progress") {
-              setSitesSearched(data.sitesSearched);
-              if (Array.isArray(data.urls)) setSearchedUrls(data.urls);
-            } else if (data.type === "result") {
-              setSummary(data.summary);
-              if (Array.isArray(data.urls)) setSearchedUrls(data.urls);
-              setStatus("done");
-            } else if (data.type === "error") {
-              setErrorMsg(data.message);
-              setStatus("error");
-            }
+            data = JSON.parse(line.slice(6));
           } catch {
-            // ignore malformed event
+            continue;
+          }
+          if (data.type === "progress") {
+            setSitesSearched(data.sitesSearched as number);
+            if (Array.isArray(data.sources)) setSources(data.sources as Source[]);
+          } else if (data.type === "generating") {
+            setIsGenerating(true);
+          } else if (data.type === "text_delta") {
+            setIsGenerating(false);
+            setSummary((prev) => prev + (data.text as string));
+          } else if (data.type === "search_error") {
+            console.warn("Web search error:", data.error_code);
+          } else if (data.type === "result") {
+            setSummary(data.summary as string);
+            if (Array.isArray(data.sources)) setSources(data.sources as Source[]);
+            setStatus("done");
+          } else if (data.type === "error") {
+            setErrorMsg(data.message as string);
+            setStatus("error");
           }
         }
       }
@@ -111,6 +86,36 @@ export default function Main() {
         setStatus("error");
       }
     }
+  }, []);
+
+  useEffect(() => {
+    if (isReady) toggleLoading(false);
+  }, [isReady, toggleLoading]);
+
+  useActionEffect(
+    {
+      actionName: "web-search",
+      beforeAction: async (args) => {
+        abortRef.current?.abort();
+        abortRef.current = null;
+        setQuery(args.query ?? "");
+        // Kick off streaming immediately — don't wait for action.ts
+        void startSearch(args.query ?? "");
+        return args;
+      },
+      afterAction: async () => {
+        // Streaming handles its own state — nothing to do here
+      },
+    },
+    [startSearch],
+  );
+
+  const handleSearch = async () => {
+    if (!query.trim() || status === "searching") return;
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    await startSearch(query, controller.signal);
   };
 
   return (
@@ -151,25 +156,33 @@ export default function Main() {
           <div className="flex items-center gap-2.5 text-sm text-gray-400">
             <div className="w-4 h-4 shrink-0 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
             <span>
-              Searching the web
-              {sitesSearched > 0 && (
+              {isGenerating ? (
+                <span className="text-blue-300">Generating response&hellip;</span>
+              ) : (
                 <>
-                  {" "}
-                  &mdash;{" "}
-                  <span className="text-blue-400 font-medium">
-                    {sitesSearched}
-                  </span>{" "}
-                  {sitesSearched === 1 ? "search" : "searches"} so far
+                  Searching the web
+                  {sitesSearched > 0 && (
+                    <>
+                      {" "}
+                      &mdash;{" "}
+                      <span className="text-blue-400 font-medium">
+                        {sitesSearched}
+                      </span>{" "}
+                      {sitesSearched === 1 ? "search" : "searches"} so far
+                    </>
+                  )}
                 </>
               )}
             </span>
           </div>
-          {searchedUrls.length > 0 && (
+          {sources.length > 0 && (
             <div className="flex flex-col gap-1 pl-6">
-              {searchedUrls.map((url) => (
-                <div key={url} className="flex items-center gap-1.5 min-w-0">
+              {sources.map((source) => (
+                <div key={source.url} className="flex items-center gap-1.5 min-w-0">
                   <div className="w-1 h-1 shrink-0 rounded-full bg-gray-600" />
-                  <span className="text-xs text-gray-500 truncate">{url}</span>
+                  <span className="text-xs text-gray-500 truncate">
+                    {source.title || source.url}
+                  </span>
                 </div>
               ))}
             </div>
@@ -211,21 +224,32 @@ export default function Main() {
                 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5
                 prose-hr:border-gray-700"
             >
-              <ReactMarkdown>{summary}</ReactMarkdown>
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{summary}</ReactMarkdown>
             </div>
           </div>
-          {status === "done" && searchedUrls.length > 0 && (
-            <div className="flex flex-col gap-1">
+          {status === "done" && sources.length > 0 && (
+            <div className="flex flex-col gap-1 shrink-0">
               <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">
                 Sources
               </span>
-              <div className="flex flex-col gap-1 bg-gray-900 border border-gray-800 rounded-lg p-2">
-                {searchedUrls.map((url) => (
-                  <div key={url} className="flex items-center gap-1.5 min-w-0">
+              <div className="flex flex-col gap-1 bg-gray-900 border border-gray-800 rounded-lg p-2 max-h-32 overflow-y-auto">
+                {sources.map((source) => (
+                  <div key={source.url} className="flex items-center gap-1.5 min-w-0">
                     <div className="w-1 h-1 shrink-0 rounded-full bg-gray-600" />
-                    <span className="text-xs text-gray-400 truncate">
-                      {url}
-                    </span>
+                    <a
+                      href={source.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-blue-400 hover:underline truncate"
+                      title={source.url}
+                    >
+                      {source.title || source.url}
+                    </a>
+                    {source.page_age && (
+                      <span className="text-xs text-gray-600 shrink-0">
+                        {source.page_age}
+                      </span>
+                    )}
                   </div>
                 ))}
               </div>

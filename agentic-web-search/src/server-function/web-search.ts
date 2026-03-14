@@ -1,41 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function extractUrlsFromToolResult(content: any): string[] {
-  if (!content) return [];
-  const urls: string[] = [];
-
-  // If it's a string, try JSON parse first, then regex
-  if (typeof content === "string") {
-    try {
-      return extractUrlsFromToolResult(JSON.parse(content));
-    } catch {
-      const matches = content.match(/https?:\/\/[^\s"',>)]+/g) ?? [];
-      return matches;
-    }
-  }
-
-  // Array of result objects e.g. [{url, title, ...}, ...]
-  if (Array.isArray(content)) {
-    for (const item of content) {
-      if (typeof item === "object" && item !== null) {
-        if (item.url) urls.push(item.url);
-        // Recurse into nested content arrays
-        if (item.content) urls.push(...extractUrlsFromToolResult(item.content));
-      }
-    }
-    return urls;
-  }
-
-  // Object with a results or content array
-  if (typeof content === "object") {
-    if (content.url) urls.push(content.url);
-    if (content.results) urls.push(...extractUrlsFromToolResult(content.results));
-    if (content.content) urls.push(...extractUrlsFromToolResult(content.content));
-  }
-
-  return urls;
-}
+type Source = { url: string; title: string; page_age?: string };
+type Citation = { url: string; title: string; cited_text: string };
 
 export default async function webSearch(req: Request): Promise<Response> {
   if (req.method !== "POST") {
@@ -57,23 +23,36 @@ export default async function webSearch(req: Request): Promise<Response> {
   const stream = new ReadableStream({
     async start(controller) {
       const send = (data: object) => {
-        controller.enqueue(
-          encoder.encode(`data: ${JSON.stringify(data)}\n\n`),
-        );
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
       };
 
       try {
         let sitesSearched = 0;
         let finalText = "";
         let currentBlockType = "";
-        let currentBlockBuffer = "";
-        const urls: string[] = [];
+        const sources: Source[] = [];
+        const citations: Citation[] = [];
 
         const msgStream = client.messages.stream({
           model: "claude-sonnet-4-6",
           max_tokens: 8096,
+          tools: [
+            {
+              type: "web_search_20260209",
+              name: "web_search",
+              max_uses: 15,
+              // Disable dynamic filtering (internal code execution) for reliable streaming
+              allowed_callers: ["direct"],
+              user_location: {
+                type: "approximate",
+                city: "Toronto",
+                region: "Ontario",
+                country: "CA",
+                timezone: "America/Toronto",
+              },
+            },
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          tools: [{ type: "web_search_20260209", name: "web_search", max_uses: 5 }] as any,
+          ] as any,
           messages: [
             {
               role: "user",
@@ -88,41 +67,83 @@ export default async function webSearch(req: Request): Promise<Response> {
             const block = event.content_block as any;
             const blockType = block.type as string;
             currentBlockType = blockType;
-            currentBlockBuffer = "";
-            
-            if (blockType === "server_tool_use" || blockType === "tool_use") {
+
+            if (blockType === "text") {
+              send({ type: "generating" });
+            } else if (blockType === "server_tool_use" && block.name === "web_search") {
               sitesSearched++;
-              send({ type: "progress", sitesSearched, urls });
+              send({
+                type: "progress",
+                sitesSearched,
+                sources,
+                urls: sources.map((s) => s.url),
+              });
             } else if (blockType === "web_search_tool_result") {
-              // URLs are fully embedded in the content_block_start event
               const content = block.content;
-              if (Array.isArray(content)) {
+              // Handle error results (e.g. max_uses_exceeded, too_many_requests)
+              if (
+                content &&
+                !Array.isArray(content) &&
+                content.type === "web_search_tool_result_error"
+              ) {
+                send({
+                  type: "search_error",
+                  error_code: content.error_code,
+                });
+              } else if (Array.isArray(content)) {
                 for (const result of content) {
-                  if (result?.url && !urls.includes(result.url)) {
-                    urls.push(result.url);
+                  if (
+                    result?.type === "web_search_result" &&
+                    result.url &&
+                    !sources.some((s) => s.url === result.url)
+                  ) {
+                    sources.push({
+                      url: result.url,
+                      title: result.title || "",
+                      page_age: result.page_age,
+                    });
                   }
                 }
               }
-              send({ type: "progress", sitesSearched, urls });
+              send({
+                type: "progress",
+                sitesSearched,
+                sources,
+                urls: sources.map((s) => s.url),
+              });
             }
           } else if (event.type === "content_block_delta") {
-            if (
-              event.delta.type === "text_delta" &&
-              currentBlockType === "text"
-            ) {
-              finalText += event.delta.text;
-            } else if (currentBlockType === "server_tool_result") {
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              const d = event.delta as any;
-              currentBlockBuffer += d.text ?? d.partial_json ?? "";
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const delta = event.delta as any;
+            if (delta.type === "text_delta" && currentBlockType === "text") {
+              finalText += delta.text;
+              send({ type: "text_delta", text: delta.text });
+
+              // Capture citations attached to text deltas
+              if (Array.isArray(delta.citations)) {
+                for (const citation of delta.citations) {
+                  if (citation.type === "web_search_result_location") {
+                    citations.push({
+                      url: citation.url,
+                      title: citation.title || "",
+                      cited_text: citation.cited_text || "",
+                    });
+                  }
+                }
+              }
             }
           } else if (event.type === "content_block_stop") {
             currentBlockType = "";
-            currentBlockBuffer = "";
           }
         }
 
-        send({ type: "result", summary: finalText, urls });
+        send({
+          type: "result",
+          summary: finalText,
+          sources,
+          citations,
+          urls: sources.map((s) => s.url),
+        });
       } catch (error) {
         send({ type: "error", message: String(error) });
       } finally {
@@ -135,7 +156,7 @@ export default async function webSearch(req: Request): Promise<Response> {
     headers: {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
-      "Connection": "keep-alive",
+      Connection: "keep-alive",
     },
   });
 }
