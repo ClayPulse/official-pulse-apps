@@ -34,13 +34,13 @@ export default async function webSearch(req: Request): Promise<Response> {
         const citations: Citation[] = [];
 
         const msgStream = client.messages.stream({
-          model: "claude-sonnet-4-6",
+          model: "claude-haiku-4-5",
           max_tokens: 8096,
           tools: [
             {
               type: "web_search_20260209",
               name: "web_search",
-              max_uses: 15,
+              max_uses: 10,
               // Disable dynamic filtering (internal code execution) for reliable streaming
               allowed_callers: ["direct"],
               user_location: {
