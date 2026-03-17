@@ -1,24 +1,16 @@
 import { AppConfig } from "@pulse-editor/shared-utils";
-import packageJson from "./package.json" with { type: "json" };
-import { preRegisteredActions } from "./pregistered-actions";
+import pkg from "./package.json" with { type: "json" };
 
-/**
- * Pulse Editor Extension Config
- *
- */
 const config: AppConfig = {
-  // Do not use hyphen character '-' in the id. 
-  // The id should be the same as the package name in package.json.
-  id: packageJson.name,
-  version: packageJson.version,
-  libVersion: packageJson.dependencies["@pulse-editor/shared-utils"],
-  displayName: packageJson.displayName,
-  description: packageJson.description,
+  id: pkg.name,
+  version: pkg.version,
+  libVersion: pkg.dependencies["@pulse-editor/react-api"],
+  displayName: pkg.displayName,
+  description: pkg.description,
   visibility: "public",
   recommendedHeight: 360,
   recommendedWidth: 640,
-  thumbnail: "assets/thumbnail.png",
-  preRegisteredActions: Object.values(preRegisteredActions),
+  thumbnail: "./src/assets/thumbnail.png",
 };
 
 export default config;

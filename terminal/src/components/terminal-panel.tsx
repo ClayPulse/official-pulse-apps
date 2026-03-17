@@ -5,68 +5,16 @@ import "@xterm/xterm/css/xterm.css";
 import "../lib/styles/xterm-style-override.css";
 import { FitAddon } from "@xterm/addon-fit";
 import {
-  useAgents,
-  useRegisterAction,
+  useActionEffect,
   useLoading,
   useTerminal,
 } from "@pulse-editor/react-api";
-import { preRegisteredActions } from "../../pregistered-actions";
 
 export default function TerminalPanel() {
   const { websocketUrl, projectHomePath } = useTerminal();
   const [ws, setWs] = useState<string | undefined>(undefined);
-  const [loadWSPromise, setLoadWSPromise] = useState<
-    | {
-        resolve: (value: unknown) => void;
-        reject: (reason?: unknown) => void;
-      }
-    | undefined
-  >(undefined);
 
-  useRegisterAction(
-    preRegisteredActions["terminal-agent"],
-    handleWriteCommand,
-    []
-  );
-
-  useRegisterAction(
-    preRegisteredActions["execute-command"],
-    async ({ command }: { command: string }) => {
-      if (websocketRef.current) {
-        const socket = websocketRef.current;
-        socket.send(
-          JSON.stringify({
-            type: "input",
-            payload: command + "\r",
-          })
-        );
-        return {
-          response: "success",
-        };
-      }
-      return {
-        response: "",
-      };
-    },
-    [projectHomePath, ws]
-  );
-
-  useRegisterAction(
-    preRegisteredActions["remote-terminal"],
-    async ({ websocketUrl }: { websocketUrl: string }) => {
-      setWs(() => websocketUrl);
-      return new Promise((resolve, reject) => {
-        setLoadWSPromise(() => ({
-          resolve,
-          reject,
-        }));
-      });
-    },
-    []
-  );
-
-  const { runAgentMethod } = useAgents();
-  const { toggleLoading, isReady } = useLoading();
+  const { toggleLoading } = useLoading();
 
   const [isWebsocketAvailable, setIsWebsocketAvailable] = useState(false);
 
@@ -75,12 +23,69 @@ export default function TerminalPanel() {
   const fitAddonRef = useRef<FitAddon>(null);
   const websocketRef = useRef<WebSocket | null>(null);
   const observerRef = useRef<ResizeObserver | null>(null);
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+  const reconnectAttemptsRef = useRef(0);
+  const isReconnectionRef = useRef(false);
 
-  useEffect(() => {
-    if (isReady) {
-      toggleLoading(false);
-    }
-  }, [isReady]);
+  useActionEffect(
+    {
+      actionName: "terminal-agent",
+      beforeAction: async (input) => {
+        return input;
+      },
+      afterAction: async (output) => {
+        if (websocketRef.current) {
+          const { script } = output as { script: string };
+          const socket = websocketRef.current;
+          script.split("\n").forEach((line: string) => {
+            socket.send(line + "\r");
+          });
+        }
+        return output;
+      },
+    },
+    [projectHomePath, ws],
+  );
+
+  useActionEffect(
+    {
+      actionName: "execute-command",
+      beforeAction: async (input) => {
+        return input;
+      },
+      afterAction: async (output) => {
+        const { command } = output as { response: string; command?: string };
+        if (websocketRef.current && command) {
+          const socket = websocketRef.current;
+          socket.send(
+            JSON.stringify({
+              type: "input",
+              payload: command + "\r",
+            }),
+          );
+        }
+        return output;
+      },
+    },
+    [projectHomePath, ws],
+  );
+
+  useActionEffect(
+    {
+      actionName: "remote-terminal",
+      beforeAction: async (input) => {
+        const { websocketUrl } = input as { websocketUrl: string };
+        setWs(() => websocketUrl);
+        return input;
+      },
+      afterAction: async (output) => {
+        return output;
+      },
+    },
+    [],
+  );
 
   useEffect(() => {
     if (websocketUrl) {
@@ -124,16 +129,9 @@ export default function TerminalPanel() {
           observer.observe(terminalDivRef.current);
         }
 
-        if (loadWSPromise) {
-          loadWSPromise.resolve("Terminal connected");
-        }
-
         setIsWebsocketAvailable(true);
       } catch (error) {
         console.error("Failed to attach WebSocket to terminal:", error);
-        if (loadWSPromise) {
-          loadWSPromise.reject(new Error("Failed to connect to WebSocket"));
-        }
       }
 
       return () => {
@@ -146,12 +144,7 @@ export default function TerminalPanel() {
     }
   }, [ws, projectHomePath]);
 
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const reconnectAttemptsRef = useRef(0);
-  const isReconnectionRef = useRef(false);
-
   function scheduleReconnect(terminal: Terminal, wsUrl: string) {
-    // Exponential backoff with a cap
     const delay = Math.min(5000, 1000 * 2 ** reconnectAttemptsRef.current);
     console.log(`Attempting to reconnect in ${delay / 1000}s...`);
 
@@ -166,22 +159,19 @@ export default function TerminalPanel() {
       throw new Error("No WebSocket URL provided.");
     }
 
-    // Clear previous reconnect timer
     if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
 
-    // Attach addon
     const webSocket = new WebSocket(ws);
     websocketRef.current = webSocket;
     webSocket.onopen = () => {
-      // Run only if this is opened for the first time
-      // Cd to project home path and then clear the terminal
       if (!isReconnectionRef.current) {
         console.log("WebSocket connection established.");
+        toggleLoading(false);
         webSocket.send(
           JSON.stringify({
             type: "input",
             payload: `cd ${projectHomePath} && clear\r`,
-          })
+          }),
         );
       } else {
         console.log("WebSocket reconnected.");
@@ -193,7 +183,7 @@ export default function TerminalPanel() {
         JSON.stringify({
           type: "resize",
           payload: { cols, rows },
-        })
+        }),
       );
     };
     webSocket.onmessage = (event) => {
@@ -206,7 +196,7 @@ export default function TerminalPanel() {
       console.error("WebSocket error: ", error);
     };
     webSocket.onclose = (event) => {
-      console.warn("⚠️ WebSocket closed:", event.reason || event.code);
+      console.warn("WebSocket closed:", event.reason || event.code);
       if (!event.wasClean) {
         isReconnectionRef.current = true;
         scheduleReconnect(terminal, ws);
@@ -222,7 +212,7 @@ export default function TerminalPanel() {
           JSON.stringify({
             type: "input",
             payload: data,
-          })
+          }),
         );
       }
     });
@@ -233,34 +223,10 @@ export default function TerminalPanel() {
           JSON.stringify({
             type: "resize",
             payload: { cols, rows },
-          })
+          }),
         );
       }
     });
-  }
-
-  async function handleWriteCommand({ userMessage }: { userMessage: string }) {
-    const { script }: { script: string } = await runAgentMethod(
-      "terminal-agent",
-      "executeCommand",
-      {
-        userMessage,
-      }
-    );
-
-    if (websocketRef.current) {
-      // script might contain multiple lines
-      // split by new line and send each line separately
-      const socket = websocketRef.current;
-      script.split("\n").forEach((line) => {
-        socket.send(line + "\r");
-      });
-    } else {
-      console.error("Terminal not initialized");
-      return "failed";
-    }
-
-    return "success";
   }
 
   return (
