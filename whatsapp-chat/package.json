@@ -1,0 +1,44 @@
+{
+  "name": "whatsapp_chat",
+  "displayName": "WhatsApp Chat",
+  "description": "A template for creating Pulse App",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lint": "eslint .",
+    "dev": "pulse dev",
+    "build": "pulse build",
+    "build-client": "pulse build --target client",
+    "build-server": "pulse build --target server",
+    "start": "pulse start",
+    "preview": "pulse preview",
+    "clean": "pulse clean"
+  },
+  "dependencies": {
+    "@pulse-editor/react-api": "^0.1.1-beta.84",
+    "@pulse-editor/shared-utils": "^0.1.1-beta.84",
+    "cors": "^2.8.6",
+    "dotenv": "^17.3.1",
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
+  },
+  "devDependencies": {
+    "@pulse-editor/cli": "^0.1.9",
+    "@tailwindcss/postcss": "^4.2.0",
+    "@types/cors": "^2.8.19",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "css-loader": "^7.1.4",
+    "eslint": "^9.39.2",
+    "eslint-plugin-react": "^7.37.5",
+    "postcss": "^8.5.6",
+    "postcss-loader": "^8.2.1",
+    "style-loader": "^4.0.0",
+    "tailwindcss": "^4.2.0",
+    "ts-loader": "^9.5.4",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.56.0"
+  }
+}
