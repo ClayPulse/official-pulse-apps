@@ -1,61 +1,19 @@
-import React, { useEffect, useState, useCallback, useRef } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import "./tailwind.css";
-import { useLoading, useActionEffect } from "@pulse-editor/react-api";
+import { useLoading, useActionEffect, useOAuth } from "@pulse-editor/react-api";
 
-// ── OAuth helpers ───────────────────────────────────────────────────────────
+// ── Constants ────────────────────────────────────────────────────────────────
 
-const AUTH_ENDPOINT = "https://mcp-auth.granola.ai/oauth2/authorize";
-const STORAGE_KEYS = {
-  accessToken: "granola_access_token",
-  refreshToken: "granola_refresh_token",
-  clientId: "granola_client_id",
-  expiresAt: "granola_expires_at",
-};
-
-function generateRandomString(length: number) {
-  const array = new Uint8Array(length);
-  crypto.getRandomValues(array);
-  return Array.from(array, (b) => b.toString(16).padStart(2, "0")).join("");
-}
-
-async function generateCodeChallenge(verifier: string) {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(verifier);
-  const digest = await crypto.subtle.digest("SHA-256", data);
-  return btoa(String.fromCharCode(...new Uint8Array(digest)))
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/, "");
-}
-
-function getStoredAuth() {
-  const accessToken = localStorage.getItem(STORAGE_KEYS.accessToken);
-  const expiresAt = localStorage.getItem(STORAGE_KEYS.expiresAt);
-  if (accessToken && expiresAt && Date.now() < Number(expiresAt)) {
-    return accessToken;
-  }
-  return null;
-}
-
-function storeAuth(data: { access_token: string; refresh_token?: string; expires_in?: number }, clientId: string) {
-  localStorage.setItem(STORAGE_KEYS.accessToken, data.access_token);
-  localStorage.setItem(STORAGE_KEYS.clientId, clientId);
-  if (data.refresh_token) {
-    localStorage.setItem(STORAGE_KEYS.refreshToken, data.refresh_token);
-  }
-  if (data.expires_in) {
-    localStorage.setItem(STORAGE_KEYS.expiresAt, String(Date.now() + data.expires_in * 1000));
-  }
-}
-
-function clearAuth() {
-  Object.values(STORAGE_KEYS).forEach((k) => localStorage.removeItem(k));
-}
+const APP_ID = "granola_meeting_notes";
+const OAUTH_PROVIDER = "granola";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
 type McpContent = { type: string; text?: string };
-type McpResult = { result?: { content?: McpContent[] }; error?: { message: string } };
+type McpResult = {
+  result?: { content?: McpContent[] };
+  error?: { message: string };
+};
 
 type View = "setup" | "list" | "detail";
 
@@ -64,26 +22,38 @@ type Meeting = {
   title: string;
   date: string;
   raw: string;
+  snippet?: string[];
+  participants?: string[];
 };
 
 // ── Component ───────────────────────────────────────────────────────────────
 
 export default function Main() {
-  const { isReady, toggleLoading } = useLoading();
-  const [view, setView] = useState<View>(() => (getStoredAuth() ? "list" : "setup"));
-  const [accessToken, setAccessToken] = useState(() => getStoredAuth() || "");
+  const { isReady: isPulseReady, toggleLoading } = useLoading();
+  const {
+    isLoading: isOAuthLoading,
+    oauth,
+    isAuthenticated,
+    connect,
+    disconnect: clearOAuth,
+    refetchOAuth,
+  } = useOAuth(APP_ID, OAUTH_PROVIDER);
+
+  const [view, setView] = useState<View>("setup");
   const [meetings, setMeetings] = useState<Meeting[]>([]);
-  const [selectedMeeting, setSelectedMeeting] = useState<{ note: string; transcript: string } | null>(null);
+  const [selectedMeeting, setSelectedMeeting] = useState<{
+    note: string;
+    transcript: string;
+  } | null>(null);
   const [selectedTitle, setSelectedTitle] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
   const [includeTranscript, setIncludeTranscript] = useState(false);
-  const authWindowRef = useRef<Window | null>(null);
 
   useEffect(() => {
-    if (isReady) toggleLoading(false);
-  }, [isReady, toggleLoading]);
+    if (isPulseReady) toggleLoading(false);
+  }, [isPulseReady, toggleLoading]);
 
   // ── Action effect for skill integration ─────────────────────────────────
   const { runAppAction } = useActionEffect(
@@ -105,152 +75,44 @@ export default function Main() {
     [],
   );
 
-  // ── OAuth callback listener ─────────────────────────────────────────────
-  useEffect(() => {
-    const handleMessage = async (event: MessageEvent) => {
-      if (event.data?.type !== "granola-oauth-callback") return;
-      const { code, state } = event.data;
-      const storedState = sessionStorage.getItem("granola_oauth_state");
-      const codeVerifier = sessionStorage.getItem("granola_code_verifier");
-      const clientId = localStorage.getItem(STORAGE_KEYS.clientId);
-
-      if (!code || state !== storedState || !codeVerifier || !clientId) {
-        setError("OAuth callback validation failed");
-        return;
-      }
-
-      setLoading(true);
-      try {
-        const res = await fetch("/server-function/granola/auth", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            action: "token",
-            code,
-            redirectUri: getRedirectUri(),
-            clientId,
-            codeVerifier,
-          }),
-        });
-        const data = await res.json();
-        if (data.error) {
-          setError(data.error);
-          return;
-        }
-        storeAuth(data, clientId);
-        setAccessToken(data.access_token);
-        setView("list");
-        sessionStorage.removeItem("granola_oauth_state");
-        sessionStorage.removeItem("granola_code_verifier");
-      } catch {
-        setError("Token exchange failed");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    window.addEventListener("message", handleMessage);
-    return () => window.removeEventListener("message", handleMessage);
-  }, []);
-
-  // ── Check URL for OAuth redirect (fallback for same-window redirect) ────
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const code = params.get("code");
-    const state = params.get("state");
-    if (code && state) {
-      // Post to self so the message handler picks it up
-      window.postMessage({ type: "granola-oauth-callback", code, state }, "*");
-      // Clean URL
-      window.history.replaceState({}, "", window.location.pathname);
-    }
-  }, []);
-
-  function getRedirectUri() {
-    return window.location.origin + window.location.pathname;
-  }
-
   // ── OAuth login ─────────────────────────────────────────────────────────
   const startOAuth = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      // Step 1: Dynamic client registration
-      const regRes = await fetch("/server-function/granola/auth", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "register", redirectUri: getRedirectUri() }),
+      // The editor handles everything: dynamic client registration, PKCE,
+      // opening the authorization window, and token exchange + storage.
+      await connect({
+        provider: OAUTH_PROVIDER,
+        authorizationUrl: "https://mcp-auth.granola.ai/oauth2/authorize",
+        tokenEndpoint: "https://mcp-auth.granola.ai/oauth2/token",
+        registrationEndpoint: "https://mcp-auth.granola.ai/oauth2/register",
+        scope: "openid email profile offline_access",
       });
-      const regData = await regRes.json();
-      if (regData.error) {
-        setError(regData.error);
-        setLoading(false);
-        return;
-      }
-      localStorage.setItem(STORAGE_KEYS.clientId, regData.client_id);
 
-      // Step 2: Generate PKCE values
-      const codeVerifier = generateRandomString(64);
-      const codeChallenge = await generateCodeChallenge(codeVerifier);
-      const state = generateRandomString(16);
-
-      sessionStorage.setItem("granola_code_verifier", codeVerifier);
-      sessionStorage.setItem("granola_oauth_state", state);
-
-      // Step 3: Open authorization URL
-      const authUrl = new URL(AUTH_ENDPOINT);
-      authUrl.searchParams.set("client_id", regData.client_id);
-      authUrl.searchParams.set("redirect_uri", getRedirectUri());
-      authUrl.searchParams.set("response_type", "code");
-      authUrl.searchParams.set("scope", "openid email profile offline_access");
-      authUrl.searchParams.set("state", state);
-      authUrl.searchParams.set("code_challenge", codeChallenge);
-      authUrl.searchParams.set("code_challenge_method", "S256");
-
-      // Try popup first, fall back to redirect
-      const popup = window.open(authUrl.toString(), "granola-auth", "width=500,height=700");
-      if (popup) {
-        authWindowRef.current = popup;
-      } else {
-        window.location.href = authUrl.toString();
-      }
+      // After the user completes the flow and closes the tab, refresh tokens
+      await refetchOAuth();
+      setView("list");
     } catch {
       setError("Failed to start authentication");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [connect, refetchOAuth]);
 
-  // ── Refresh token ───────────────────────────────────────────────────────
-  const refreshAccessToken = useCallback(async () => {
-    const refreshToken = localStorage.getItem(STORAGE_KEYS.refreshToken);
-    const clientId = localStorage.getItem(STORAGE_KEYS.clientId);
-    if (!refreshToken || !clientId) return null;
-
-    const res = await fetch("/server-function/granola/auth", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "refresh", refreshToken, clientId }),
-    });
-    const data = await res.json();
-    if (data.error) return null;
-    storeAuth(data, clientId);
-    setAccessToken(data.access_token);
-    return data.access_token;
-  }, []);
-
-  const getValidToken = useCallback(async () => {
-    const stored = getStoredAuth();
-    if (stored) return stored;
-    return refreshAccessToken();
-  }, [refreshAccessToken]);
+  // ── Get access token ───────────────────────────────────────────────────
+  const getAccessToken = useCallback((): string | null => {
+    if (!isAuthenticated || !oauth?.accessToken) return null;
+    if (oauth.expiresAt && Date.now() >= Number(oauth.expiresAt)) return null;
+    return oauth.accessToken;
+  }, [isAuthenticated, oauth]);
 
   // ── Fetch meetings ──────────────────────────────────────────────────────
   const fetchMeetings = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const token = await getValidToken();
+      const token = getAccessToken();
       if (!token) {
         setLoading(false);
         setView("setup");
@@ -266,8 +128,7 @@ export default function Main() {
 
       if (data.error) {
         if (res.status === 401) {
-          clearAuth();
-          setAccessToken("");
+          await clearOAuth();
           setLoading(false);
           setView("setup");
           setError("Session expired. Please sign in again.");
@@ -277,7 +138,6 @@ export default function Main() {
         return;
       }
 
-      // Parse MCP response — content is an array of text blocks
       const content = data.result?.content;
       if (!content?.length) {
         setMeetings([]);
@@ -292,7 +152,7 @@ export default function Main() {
     } finally {
       setLoading(false);
     }
-  }, [getValidToken]);
+  }, [getAccessToken, clearOAuth]);
 
   // ── Fetch single meeting ────────────────────────────────────────────────
   const fetchMeeting = useCallback(
@@ -300,7 +160,7 @@ export default function Main() {
       setLoading(true);
       setError("");
       try {
-        const token = await getValidToken();
+        const token = getAccessToken();
         if (!token) {
           setLoading(false);
           setView("setup");
@@ -310,19 +170,30 @@ export default function Main() {
         const res = await fetch("/server-function/granola/note", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ accessToken: token, meetingId, includeTranscript }),
+          body: JSON.stringify({
+            accessToken: token,
+            meetingId,
+            includeTranscript,
+          }),
         });
         const data = await res.json();
 
         if (data.error) {
-          setError(typeof data.error === "string" ? data.error : data.error.message);
+          setError(
+            typeof data.error === "string" ? data.error : data.error.message,
+          );
           return;
         }
 
         const noteContent = extractTextContent(data.note);
-        const transcriptContent = data.transcript ? extractTextContent(data.transcript) : "";
+        const transcriptContent = data.transcript
+          ? extractTextContent(data.transcript)
+          : "";
 
-        setSelectedMeeting({ note: noteContent, transcript: transcriptContent });
+        setSelectedMeeting({
+          note: noteContent,
+          transcript: transcriptContent,
+        });
         setSelectedTitle(title);
         setView("detail");
       } catch {
@@ -331,13 +202,14 @@ export default function Main() {
         setLoading(false);
       }
     },
-    [getValidToken, includeTranscript],
+    [getAccessToken, includeTranscript],
   );
 
   // ── Copy as markdown ────────────────────────────────────────────────────
   const copyMarkdown = useCallback(() => {
     if (!selectedMeeting) return;
-    let md = `# ${selectedTitle}\n\n${selectedMeeting.note}`;
+    const { summary } = parseNoteContent(selectedMeeting.note);
+    let md = `# ${selectedTitle}\n\n${summary}`;
     if (selectedMeeting.transcript) {
       md += `\n\n## Transcript\n\n${selectedMeeting.transcript}`;
     }
@@ -346,9 +218,8 @@ export default function Main() {
     setTimeout(() => setCopied(false), 2000);
   }, [selectedMeeting, selectedTitle]);
 
-  const disconnect = () => {
-    clearAuth();
-    setAccessToken("");
+  const disconnect = async () => {
+    await clearOAuth();
     setMeetings([]);
     setSelectedMeeting(null);
     setLoading(false);
@@ -356,12 +227,12 @@ export default function Main() {
     setView("setup");
   };
 
-  // Auto-fetch on mount if authenticated
+  // Auto-fetch once OAuth loads and user is authenticated
   useEffect(() => {
-    if (accessToken && view === "list" && meetings.length === 0) {
+    if (!isOAuthLoading && isAuthenticated && meetings.length === 0) {
       fetchMeetings();
     }
-  }, [accessToken]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isOAuthLoading, isAuthenticated]);
 
   return (
     <div className="flex flex-col w-full h-full bg-[#fafafa] text-gray-900 text-sm">
@@ -374,7 +245,16 @@ export default function Main() {
               className="p-1 -ml-1 rounded-md hover:bg-gray-100 transition-colors"
               aria-label="Back"
             >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
                 <path d="M10 12L6 8l4-4" />
               </svg>
             </button>
@@ -384,7 +264,9 @@ export default function Main() {
               {view === "detail" ? selectedTitle : "Granola Notes"}
             </h1>
             {view === "list" && meetings.length > 0 && (
-              <span className="text-[11px] text-gray-400">{meetings.length} meeting{meetings.length !== 1 ? "s" : ""}</span>
+              <span className="text-[11px] text-gray-400">
+                {meetings.length} meeting{meetings.length !== 1 ? "s" : ""}
+              </span>
             )}
           </div>
         </div>
@@ -396,7 +278,17 @@ export default function Main() {
               className="p-1.5 rounded-md hover:bg-gray-100 disabled:opacity-40 transition-colors"
               aria-label="Refresh"
             >
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={loading ? "animate-spin" : ""}>
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className={loading ? "animate-spin" : ""}
+              >
                 <path d="M1.5 8a6.5 6.5 0 0 1 11.25-4.5M14.5 8a6.5 6.5 0 0 1-11.25 4.5" />
                 <path d="M13.5 2v3.5H10M2.5 14v-3.5H6" />
               </svg>
@@ -413,12 +305,35 @@ export default function Main() {
             >
               {copied ? (
                 <>
-                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3.5 8.5l3 3 6-7" /></svg>
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M3.5 8.5l3 3 6-7" />
+                  </svg>
                   Copied
                 </>
               ) : (
                 <>
-                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="5" width="9" height="9" rx="1.5" /><path d="M2 11V2.5A.5.5 0 0 1 2.5 2H11" /></svg>
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <rect x="5" y="5" width="9" height="9" rx="1.5" />
+                    <path d="M2 11V2.5A.5.5 0 0 1 2.5 2H11" />
+                  </svg>
                   Copy
                 </>
               )}
@@ -431,7 +346,16 @@ export default function Main() {
               aria-label="Disconnect"
               title="Disconnect from Granola"
             >
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
                 <path d="M6 2H3.5A1.5 1.5 0 0 0 2 3.5v9A1.5 1.5 0 0 0 3.5 14H6M10.5 11.5L14 8l-3.5-3.5M6 8h8" />
               </svg>
             </button>
@@ -449,28 +373,85 @@ export default function Main() {
       {/* Error toast */}
       {error && (
         <div className="mx-3 mt-3 px-3 py-2.5 bg-red-50 border border-red-100 rounded-lg text-red-600 text-xs flex items-start gap-2">
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="mt-px shrink-0">
-            <circle cx="8" cy="8" r="6.5" /><path d="M8 5v3.5M8 10.5v.5" strokeLinecap="round" />
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            className="mt-px shrink-0"
+          >
+            <circle cx="8" cy="8" r="6.5" />
+            <path d="M8 5v3.5M8 10.5v.5" strokeLinecap="round" />
           </svg>
           <span className="flex-1">{error}</span>
-          <button onClick={() => setError("")} className="text-red-400 hover:text-red-600 shrink-0">
-            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 4l8 8M12 4l-8 8" /></svg>
+          <button
+            onClick={() => setError("")}
+            className="text-red-400 hover:text-red-600 shrink-0"
+          >
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+            >
+              <path d="M4 4l8 8M12 4l-8 8" />
+            </svg>
           </button>
         </div>
       )}
 
+      {/* OAuth initializing — loading spinner */}
+      {isOAuthLoading && view === "setup" && (
+        <div className="flex-1 flex items-center justify-center">
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            className="animate-spin text-gray-300"
+          >
+            <circle
+              cx="8"
+              cy="8"
+              r="6"
+              strokeDasharray="30"
+              strokeDashoffset="10"
+            />
+          </svg>
+        </div>
+      )}
+
       {/* Setup view — OAuth login */}
-      {view === "setup" && (
+      {!isOAuthLoading && view === "setup" && (
         <div className="flex-1 flex flex-col items-center justify-center p-8 gap-6">
           <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow-lg shadow-orange-200">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M4 4h16v16H4z" /><path d="M8 8h8M8 12h6M8 16h4" />
+            <svg
+              width="28"
+              height="28"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="white"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M4 4h16v16H4z" />
+              <path d="M8 8h8M8 12h6M8 16h4" />
             </svg>
           </div>
           <div className="text-center space-y-1.5">
             <h2 className="text-lg font-semibold">Connect to Granola</h2>
             <p className="text-[13px] text-gray-500 leading-relaxed">
-              Sign in to access your meeting notes,<br />summaries, and transcripts.
+              Sign in to access your meeting notes,
+              <br />
+              summaries, and transcripts.
             </p>
           </div>
           <button
@@ -480,10 +461,28 @@ export default function Main() {
           >
             {loading ? (
               <span className="flex items-center justify-center gap-2">
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="animate-spin"><circle cx="8" cy="8" r="6" strokeDasharray="30" strokeDashoffset="10" /></svg>
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  className="animate-spin"
+                >
+                  <circle
+                    cx="8"
+                    cy="8"
+                    r="6"
+                    strokeDasharray="30"
+                    strokeDashoffset="10"
+                  />
+                </svg>
                 Connecting...
               </span>
-            ) : "Sign in with Granola"}
+            ) : (
+              "Sign in with Granola"
+            )}
           </button>
           <p className="text-[11px] text-gray-400 text-center leading-relaxed">
             Free: last 30 days &middot; Paid: full access + transcripts
@@ -510,8 +509,19 @@ export default function Main() {
           <div className="flex-1 overflow-auto">
             {meetings.length === 0 && !loading && (
               <div className="flex flex-col items-center justify-center py-16 text-gray-400 gap-2">
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" className="text-gray-300">
-                  <rect x="3" y="3" width="18" height="18" rx="3" /><path d="M8 8h8M8 12h6M8 16h4" />
+                <svg
+                  width="32"
+                  height="32"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="text-gray-300"
+                >
+                  <rect x="3" y="3" width="18" height="18" rx="3" />
+                  <path d="M8 8h8M8 12h6M8 16h4" />
                 </svg>
                 <span className="text-xs">No meetings found</span>
               </div>
@@ -528,11 +538,44 @@ export default function Main() {
                       <div className="font-medium text-[13px] truncate group-hover:text-gray-900">
                         {meeting.title || "Untitled"}
                       </div>
-                      {meeting.date && (
-                        <div className="text-[11px] text-gray-400 mt-0.5">{meeting.date}</div>
+                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                        {meeting.date && (
+                          <span className="text-[11px] text-gray-400">
+                            {meeting.date}
+                          </span>
+                        )}
+                        {meeting.participants &&
+                          meeting.participants.length > 0 && (
+                            <span className="text-[11px] text-gray-400">
+                              &middot; {meeting.participants.length} participant
+                              {meeting.participants.length !== 1 ? "s" : ""}
+                            </span>
+                          )}
+                      </div>
+                      {meeting.snippet && meeting.snippet.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1.5">
+                          {meeting.snippet.map((s, i) => (
+                            <span
+                              key={i}
+                              className="inline-block px-1.5 py-0.5 bg-gray-100 text-gray-500 text-[10px] rounded-md leading-tight"
+                            >
+                              {s}
+                            </span>
+                          ))}
+                        </div>
                       )}
                     </div>
-                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-gray-300 group-hover:text-gray-500 mt-0.5 shrink-0 transition-colors">
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 16 16"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="text-gray-300 group-hover:text-gray-500 mt-0.5 shrink-0 transition-colors"
+                    >
                       <path d="M6 4l4 4-4 4" />
                     </svg>
                   </div>
@@ -547,12 +590,36 @@ export default function Main() {
       {view === "detail" && selectedMeeting && (
         <div className="flex-1 flex flex-col overflow-hidden">
           <div className="flex-1 overflow-auto">
-            <div className="px-4 py-4 space-y-4">
-              <div className="prose prose-sm max-w-none text-[13px] leading-relaxed whitespace-pre-wrap text-gray-800">
-                {selectedMeeting.note}
-              </div>
+            <div className="px-4 py-4">
+              {(() => {
+                const { participants, summary } = parseNoteContent(
+                  selectedMeeting.note,
+                );
+                return (
+                  <>
+                    {participants.length > 0 && (
+                      <div className="mb-4 pb-3 border-b border-gray-100">
+                        <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">
+                          Participants
+                        </div>
+                        <div className="space-y-0.5">
+                          {participants.map((p, i) => (
+                            <div
+                              key={i}
+                              className="text-[12px] text-gray-500 leading-relaxed"
+                            >
+                              {p}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    <MarkdownNote content={summary} />
+                  </>
+                );
+              })()}
               {selectedMeeting.transcript && (
-                <div className="border-t border-gray-100 pt-4">
+                <div className="border-t border-gray-100 pt-4 mt-4">
                   <h3 className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-2">
                     Transcript
                   </h3>
@@ -571,6 +638,116 @@ export default function Main() {
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
+function parseNoteContent(raw: string): {
+  participants: string[];
+  summary: string;
+} {
+  const summaryMatch = raw.match(/<summary>([\s\S]*?)<\/summary>/);
+  const summary = summaryMatch ? summaryMatch[1].trim() : raw;
+
+  const participantsMatch = raw.match(
+    /<known_participants>([\s\S]*?)<\/known_participants>/,
+  );
+  const participants = participantsMatch
+    ? participantsMatch[1]
+        .trim()
+        .split("\n")
+        .map((l) => l.trim())
+        .filter(Boolean)
+    : [];
+
+  return { participants, summary };
+}
+
+function MarkdownNote({ content }: { content: string }) {
+  const lines = content.split("\n");
+  const nodes: React.ReactNode[] = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    if (!line.trim()) {
+      i++;
+      continue;
+    }
+
+    if (line.startsWith("### ")) {
+      nodes.push(
+        <h3
+          key={`h-${i}`}
+          className="font-semibold text-[13px] text-gray-800 mt-5 first:mt-0 mb-2"
+        >
+          {line.slice(4)}
+        </h3>,
+      );
+      i++;
+      continue;
+    }
+
+    if (/^-\s+/.test(line)) {
+      const items: { text: string; sub: string[] }[] = [];
+      while (i < lines.length) {
+        const l = lines[i];
+        if (/^-\s+/.test(l)) {
+          items.push({ text: l.replace(/^-\s+/, ""), sub: [] });
+          i++;
+        } else if (/^\s{2,}-\s+/.test(l)) {
+          if (items.length > 0)
+            items[items.length - 1].sub.push(l.replace(/^\s+-\s+/, ""));
+          i++;
+        } else if (l.trim() === "") {
+          i++;
+          break;
+        } else {
+          break;
+        }
+      }
+      nodes.push(
+        <ul key={`ul-${i}`} className="mb-3 space-y-1.5">
+          {items.map((item, j) => (
+            <li
+              key={j}
+              className="flex gap-2 text-[13px] text-gray-700 leading-relaxed"
+            >
+              <span className="mt-1.75 w-1.5 h-1.5 rounded-full bg-gray-300 shrink-0" />
+              <span>
+                {item.text}
+                {item.sub.length > 0 && (
+                  <ul className="mt-1 space-y-1">
+                    {item.sub.map((s, k) => (
+                      <li
+                        key={k}
+                        className="flex gap-2 text-[12px] text-gray-500 leading-relaxed"
+                      >
+                        <span className="mt-1.25 w-1 h-1 rounded-full bg-gray-200 shrink-0" />
+                        <span>{s}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </span>
+            </li>
+          ))}
+        </ul>,
+      );
+      continue;
+    }
+
+    nodes.push(
+      <p
+        key={`p-${i}`}
+        className="text-[13px] text-gray-700 leading-relaxed mb-2"
+      >
+        {line}
+      </p>,
+    );
+    i++;
+  }
+
+  return <>{nodes}</>;
+}
+
 function extractTextContent(mcpResponse: McpResult): string {
   const content = mcpResponse.result?.content;
   if (!content?.length) return "";
@@ -586,9 +763,42 @@ function parseMeetingList(content: McpContent[]): Meeting[] {
     .map((c) => c.text!)
     .join("\n");
 
-  // The MCP list_meetings tool returns structured text — parse meeting entries
   const meetings: Meeting[] = [];
-  // Try to parse as JSON first
+
+  // Try to parse XML meeting elements
+  const meetingTagPattern = /<meeting\s([^>]*)>([\s\S]*?)<\/meeting>/g;
+  let match: RegExpExecArray | null;
+  while ((match = meetingTagPattern.exec(text)) !== null) {
+    const attrs = match[1];
+    const body = match[2];
+
+    const id = (attrs.match(/id="([^"]+)"/) || [])[1] || "";
+    const title = (attrs.match(/title="([^"]+)"/) || [])[1] || "Untitled";
+    const date = (attrs.match(/date="([^"]+)"/) || [])[1] || "";
+
+    const participantsMatch = body.match(
+      /<known_participants>([\s\S]*?)<\/known_participants>/,
+    );
+    const participants = participantsMatch
+      ? participantsMatch[1]
+          .trim()
+          .split("\n")
+          .map((l) => l.trim())
+          .filter(Boolean)
+      : [];
+
+    const summaryMatch = body.match(/<summary>([\s\S]*?)<\/summary>/);
+    const summaryText = summaryMatch ? summaryMatch[1] : "";
+    const snippet = summaryText
+      .split("\n")
+      .filter((l) => l.startsWith("### "))
+      .map((l) => l.slice(4).trim())
+      .slice(0, 3);
+
+    meetings.push({ id, title, date, raw: match[0], snippet, participants });
+  }
+  if (meetings.length > 0) return meetings;
+
   try {
     const parsed = JSON.parse(text);
     if (Array.isArray(parsed)) {
@@ -606,8 +816,6 @@ function parseMeetingList(content: McpContent[]): Meeting[] {
     // Not JSON, parse as text
   }
 
-  // Fallback: parse line-based format
-  // Common patterns: "- Title (date) [id]" or similar
   const lines = text.split("\n").filter((l) => l.trim());
   const idPattern = /\b(not_[a-zA-Z0-9]{14}|[a-f0-9-]{36})\b/;
 
@@ -615,12 +823,15 @@ function parseMeetingList(content: McpContent[]): Meeting[] {
     const idMatch = line.match(idPattern);
     if (idMatch) {
       const id = idMatch[1];
-      const title = line.replace(idMatch[0], "").replace(/[-|:[\]()]/g, " ").trim() || "Untitled";
+      const title =
+        line
+          .replace(idMatch[0], "")
+          .replace(/[-|:[\]()]/g, " ")
+          .trim() || "Untitled";
       meetings.push({ id, title, date: "", raw: line });
     }
   }
 
-  // If no IDs found, just show the text as a single block
   if (meetings.length === 0 && text.trim()) {
     meetings.push({ id: "raw", title: "Meeting Notes", date: "", raw: text });
   }

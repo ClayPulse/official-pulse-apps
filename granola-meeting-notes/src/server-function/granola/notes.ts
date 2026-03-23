@@ -1,5 +1,7 @@
 const MCP_ENDPOINT = "https://mcp.granola.ai/mcp";
 
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0"; // Disable TLS verification for local development (not recommended for production)
+
 /**
  * Parses a JSON-RPC result from a response that may be SSE or plain JSON.
  */
