@@ -32,11 +32,9 @@ export default function Main() {
   const { isReady: isPulseReady, toggleLoading } = useLoading();
   const {
     isLoading: isOAuthLoading,
-    oauth,
     isAuthenticated,
     connect,
     disconnect: clearOAuth,
-    refetchOAuth,
   } = useOAuth(APP_ID, OAUTH_PROVIDER);
 
   const [view, setView] = useState<View>("setup");
@@ -56,20 +54,11 @@ export default function Main() {
   }, [isPulseReady, toggleLoading]);
 
   // ── Action effect for skill integration ─────────────────────────────────
-  const { runAppAction } = useActionEffect(
+  useActionEffect(
     {
       actionName: "export-notes",
       beforeAction: async (args: Record<string, unknown>) => {
         return args;
-      },
-      afterAction: async (result: Record<string, unknown>) => {
-        if (!result) return;
-        if (result.success && result.markdown) {
-          await navigator.clipboard.writeText(result.markdown as string);
-          setCopied(true);
-          setTimeout(() => setCopied(false), 2000);
-        }
-        return result;
       },
     },
     [],
@@ -90,39 +79,23 @@ export default function Main() {
         scope: "openid email profile offline_access",
       });
 
-      // After the user completes the flow and closes the tab, refresh tokens
-      await refetchOAuth();
       setView("list");
     } catch {
       setError("Failed to start authentication");
     } finally {
       setLoading(false);
     }
-  }, [connect, refetchOAuth]);
-
-  // ── Get access token ───────────────────────────────────────────────────
-  const getAccessToken = useCallback((): string | null => {
-    if (!isAuthenticated || !oauth?.accessToken) return null;
-    if (oauth.expiresAt && Date.now() >= Number(oauth.expiresAt)) return null;
-    return oauth.accessToken;
-  }, [isAuthenticated, oauth]);
+  }, [connect]);
 
   // ── Fetch meetings ──────────────────────────────────────────────────────
   const fetchMeetings = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const token = getAccessToken();
-      if (!token) {
-        setLoading(false);
-        setView("setup");
-        return;
-      }
-
       const res = await fetch("/server-function/granola/notes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ accessToken: token }),
+        body: JSON.stringify({}),
       });
       const data: McpResult = await res.json();
 
@@ -152,7 +125,7 @@ export default function Main() {
     } finally {
       setLoading(false);
     }
-  }, [getAccessToken, clearOAuth]);
+  }, [clearOAuth]);
 
   // ── Fetch single meeting ────────────────────────────────────────────────
   const fetchMeeting = useCallback(
@@ -160,18 +133,10 @@ export default function Main() {
       setLoading(true);
       setError("");
       try {
-        const token = getAccessToken();
-        if (!token) {
-          setLoading(false);
-          setView("setup");
-          return;
-        }
-
         const res = await fetch("/server-function/granola/note", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            accessToken: token,
             meetingId,
             includeTranscript,
           }),
@@ -202,7 +167,7 @@ export default function Main() {
         setLoading(false);
       }
     },
-    [getAccessToken, includeTranscript],
+    [includeTranscript],
   );
 
   // ── Copy as markdown ────────────────────────────────────────────────────

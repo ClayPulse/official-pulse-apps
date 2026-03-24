@@ -32,9 +32,20 @@ export default async function getMeeting(req: Request) {
     return new Response("Method Not Allowed", { status: 405 });
   }
 
-  const { accessToken, meetingId, includeTranscript } = await req.json();
-  if (!accessToken || !meetingId) {
-    return new Response(JSON.stringify({ error: "Access token and meetingId required" }), { status: 400 });
+  console.log("Env" + JSON.stringify(process.env));
+
+  const { meetingId, includeTranscript } = await req.json();
+  const accessToken = process.env.OAUTH_GRANOLA_ACCESSTOKEN;
+  if (!accessToken) {
+    return new Response(
+      JSON.stringify({ error: "Not authenticated with Granola" }),
+      { status: 401 },
+    );
+  }
+  if (!meetingId) {
+    return new Response(JSON.stringify({ error: "meetingId required" }), {
+      status: 400,
+    });
   }
 
   const mcpHeaders = {
@@ -47,12 +58,27 @@ export default async function getMeeting(req: Request) {
   const initRes = await fetch(MCP_ENDPOINT, {
     method: "POST",
     headers: mcpHeaders,
-    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "granola-pulse-app", version: "0.0.1" } } }),
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: {
+        protocolVersion: "2025-03-26",
+        capabilities: {},
+        clientInfo: { name: "granola-pulse-app", version: "0.0.1" },
+      },
+    }),
   });
 
   if (!initRes.ok) {
     const text = await initRes.text();
-    return new Response(JSON.stringify({ error: `MCP init failed: ${initRes.status}`, detail: text }), { status: initRes.status });
+    return new Response(
+      JSON.stringify({
+        error: `MCP init failed: ${initRes.status}`,
+        detail: text,
+      }),
+      { status: initRes.status },
+    );
   }
 
   await parseMcpResponse(initRes);
@@ -76,7 +102,13 @@ export default async function getMeeting(req: Request) {
 
   if (!noteRes.ok) {
     const text = await noteRes.text();
-    return new Response(JSON.stringify({ error: `MCP call failed: ${noteRes.status}`, detail: text }), { status: noteRes.status });
+    return new Response(
+      JSON.stringify({
+        error: `MCP call failed: ${noteRes.status}`,
+        detail: text,
+      }),
+      { status: noteRes.status },
+    );
   }
 
   const noteData = await parseMcpResponse(noteRes);
@@ -91,7 +123,10 @@ export default async function getMeeting(req: Request) {
         jsonrpc: "2.0",
         id: 3,
         method: "tools/call",
-        params: { name: "get_meeting_transcript", arguments: { meeting_id: meetingId } },
+        params: {
+          name: "get_meeting_transcript",
+          arguments: { meeting_id: meetingId },
+        },
       }),
     });
 

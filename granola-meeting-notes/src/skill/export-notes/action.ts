@@ -1,105 +1,116 @@
 /**
- * @typedef {Object} Input - The input parameters for the export-notes action.
- * @property {string} [meetingId] - The Granola meeting ID to export. If omitted, exports the most recent meeting.
- * @property {boolean} [includeTranscript] - Whether to include the full transcript.
+ * @typedef {Object} NoteItem
+ * @property {string} title - The meeting note title.
+ * @property {string} content - The meeting note content.
  */
-type Input = {
-  meetingId?: string;
-  includeTranscript?: boolean;
+type NoteItem = {
+  title: string;
+  content: string;
 };
 
 /**
  * @typedef {Object} Output - The output of the export-notes action.
- * @property {string} markdown - The exported meeting note as formatted markdown.
- * @property {string} title - The title of the meeting note.
- * @property {string} meetingId - The ID of the exported meeting.
- * @property {boolean} success - Whether the export was successful.
- * @property {string} [error] - Error message if the export failed.
+ * @property {NoteItem[]} notes - A list of meeting notes with title and content.
  */
 type Output = {
-  markdown: string;
-  title: string;
-  meetingId: string;
-  success: boolean;
-  error?: string;
+  notes: NoteItem[];
 };
 
 /**
- * Export meeting notes from Granola.ai as formatted markdown via MCP.
- * Requires the user to be authenticated via OAuth in the Pulse App UI.
+ * Export all meeting notes from Granola, each with title and content.
  *
- * @param {Input} input - The input parameters for the export action.
- * @returns {Promise<Output>} The exported meeting note.
+ * @returns {Promise<Output>} The list of meeting notes.
  */
-export default async function exportNotes({
-  meetingId,
-  includeTranscript = false,
-}: Input): Promise<Output> {
+export default async function exportNotes(): Promise<Output> {
   try {
-    const accessToken = typeof localStorage !== "undefined"
-      ? localStorage.getItem("granola_access_token")
-      : null;
-
-    if (!accessToken) {
-      return { markdown: "", title: "", meetingId: "", success: false, error: "Not authenticated. Please sign in via the Granola Notes app first." };
-    }
-
-    // If no meetingId, list meetings and pick the first
-    if (!meetingId) {
-      const listRes = await fetch("/server-function/granola/notes", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ accessToken }),
-      });
-      const listData = await listRes.json();
-      const content = listData.result?.content;
-      if (!content?.length) {
-        return { markdown: "", title: "", meetingId: "", success: false, error: "No meetings found" };
-      }
-      // Try to extract the first meeting ID from the response
-      const text = content.map((c: { text?: string }) => c.text || "").join("\n");
-      const idMatch = text.match(/\b(not_[a-zA-Z0-9]{14}|[a-f0-9-]{36})\b/);
-      if (!idMatch) {
-        return { markdown: text, title: "Recent Meetings", meetingId: "", success: true };
-      }
-      meetingId = idMatch[1];
-    }
-
-    const noteRes = await fetch("/server-function/granola/note", {
+    // 1. Fetch the list of meetings
+    const listRes = await fetch("/server-function/granola/notes", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ accessToken, meetingId, includeTranscript }),
+      body: JSON.stringify({}),
     });
-    const data = await noteRes.json();
+    const listData = await listRes.json();
 
-    if (data.error) {
-      return { markdown: "", title: "", meetingId: meetingId!, success: false, error: typeof data.error === "string" ? data.error : data.error.message };
+    const content = listData.result?.content;
+    if (!content?.length) {
+      return { notes: [] };
     }
 
-    const noteText = extractText(data.note);
-    const transcriptText = data.transcript ? extractText(data.transcript) : "";
+    const text = content
+      .filter((c: { type: string; text?: string }) => c.type === "text" && c.text)
+      .map((c: { text?: string }) => c.text!)
+      .join("\n");
 
-    let markdown = noteText;
-    if (transcriptText) {
-      markdown += `\n\n## Transcript\n\n${transcriptText}`;
+    // Extract meeting IDs and titles
+    const meetings: { id: string; title: string }[] = [];
+
+    // Try XML meeting elements: <meeting id="..." title="...">
+    const meetingTagPattern = /<meeting\s[^>]*?id="([^"]+)"[^>]*?title="([^"]+)"[^>]*>/g;
+    let match: RegExpExecArray | null;
+    while ((match = meetingTagPattern.exec(text)) !== null) {
+      meetings.push({ id: match[1], title: match[2] });
     }
 
-    // Extract title from first line
-    const titleMatch = noteText.match(/^#?\s*(.+)/);
-    const title = titleMatch ? titleMatch[1].trim() : "Meeting Notes";
+    // Also try title before id
+    if (meetings.length === 0) {
+      const altPattern = /<meeting\s[^>]*?title="([^"]+)"[^>]*?id="([^"]+)"[^>]*>/g;
+      while ((match = altPattern.exec(text)) !== null) {
+        meetings.push({ id: match[2], title: match[1] });
+      }
+    }
 
-    return { markdown, title, meetingId: meetingId!, success: true };
+    // Try JSON array fallback
+    if (meetings.length === 0) {
+      try {
+        const parsed = JSON.parse(text);
+        if (Array.isArray(parsed)) {
+          for (const m of parsed) {
+            meetings.push({
+              id: m.id || m.meeting_id || "",
+              title: m.title || m.name || "Untitled",
+            });
+          }
+        }
+      } catch {
+        // Not JSON
+      }
+    }
+
+    if (meetings.length === 0) {
+      return { notes: [] };
+    }
+
+    // 2. Fetch content for each meeting
+    const notes: NoteItem[] = await Promise.all(
+      meetings.map(async (meeting) => {
+        try {
+          const noteRes = await fetch("/server-function/granola/note", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ meetingId: meeting.id }),
+          });
+          const noteData = await noteRes.json();
+
+          // Extract text content from the MCP response
+          const noteContent = noteData.note?.result?.content;
+          let noteText = "";
+          if (noteContent?.length) {
+            noteText = noteContent
+              .filter((c: { type: string; text?: string }) => c.type === "text" && c.text)
+              .map((c: { text?: string }) => c.text!)
+              .join("\n");
+          }
+
+          return { title: meeting.title, content: noteText };
+        } catch {
+          return { title: meeting.title, content: "" };
+        }
+      }),
+    );
+
+    return { notes };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    return { markdown: "", title: "", meetingId: meetingId || "", success: false, error: message };
+    return { notes: [{ title: "Error", content: message }] };
   }
-}
-
-function extractText(mcpResponse: { result?: { content?: Array<{ type: string; text?: string }> } }): string {
-  const content = mcpResponse.result?.content;
-  if (!content?.length) return "";
-  return content
-    .filter((c) => c.type === "text" && c.text)
-    .map((c) => c.text!)
-    .join("\n\n");
 }

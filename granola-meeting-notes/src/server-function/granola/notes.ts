@@ -34,9 +34,15 @@ export default async function listMeetings(req: Request) {
     return new Response("Method Not Allowed", { status: 405 });
   }
 
-  const { accessToken, arguments: args } = await req.json();
+  console.log("Env" + JSON.stringify(process.env));
+
+  const { arguments: args } = await req.json();
+  const accessToken = process.env.OAUTH_GRANOLA_ACCESSTOKEN;
   if (!accessToken) {
-    return new Response(JSON.stringify({ error: "Access token required" }), { status: 400 });
+    return new Response(
+      JSON.stringify({ error: "Not authenticated with Granola" }),
+      { status: 401 },
+    );
   }
 
   const mcpHeaders = {
@@ -49,12 +55,27 @@ export default async function listMeetings(req: Request) {
   const initRes = await fetch(MCP_ENDPOINT, {
     method: "POST",
     headers: mcpHeaders,
-    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "granola-pulse-app", version: "0.0.1" } } }),
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: {
+        protocolVersion: "2025-03-26",
+        capabilities: {},
+        clientInfo: { name: "granola-pulse-app", version: "0.0.1" },
+      },
+    }),
   });
 
   if (!initRes.ok) {
     const text = await initRes.text();
-    return new Response(JSON.stringify({ error: `MCP init failed: ${initRes.status}`, detail: text }), { status: initRes.status });
+    return new Response(
+      JSON.stringify({
+        error: `MCP init failed: ${initRes.status}`,
+        detail: text,
+      }),
+      { status: initRes.status },
+    );
   }
 
   await parseMcpResponse(initRes);
@@ -77,7 +98,13 @@ export default async function listMeetings(req: Request) {
 
   if (!toolRes.ok) {
     const text = await toolRes.text();
-    return new Response(JSON.stringify({ error: `MCP call failed: ${toolRes.status}`, detail: text }), { status: toolRes.status });
+    return new Response(
+      JSON.stringify({
+        error: `MCP call failed: ${toolRes.status}`,
+        detail: text,
+      }),
+      { status: toolRes.status },
+    );
   }
 
   const data = await parseMcpResponse(toolRes);
