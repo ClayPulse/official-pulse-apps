@@ -1,7 +1,7 @@
 {
   "name": "whatsapp_chat",
   "displayName": "WhatsApp Chat",
-  "description": "A template for creating Pulse App",
+  "description": "Send and receive WhatsApp messages via the WhatsApp Business Cloud API",
   "version": "0.0.1",
   "private": true,
   "type": "module",
