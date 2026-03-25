@@ -2,8 +2,21 @@ import React, { useEffect, useState } from "react";
 import "./tailwind.css";
 import { useLoading, useActionEffect } from "@pulse-editor/react-api";
 
-type Mode = "managed" | "byok";
-type Tab = "send" | "domains";
+type Mode = "managed" | "byok" | "gmail";
+type Tab = "send" | "domains" | "inbox";
+type EmailSummary = {
+  id: string;
+  threadId: string;
+  snippet: string;
+  from: string;
+  to: string;
+  subject: string;
+  date: string;
+  isUnread: boolean;
+};
+type EmailDetail = EmailSummary & {
+  body: { html: string; text: string };
+};
 type Domain = {
   id: string;
   name: string;
@@ -32,6 +45,18 @@ export default function Main() {
   const [mode, setMode] = useState<Mode>("managed");
   const [apiKey, setApiKey] = useState("");
 
+  // Gmail state
+  const [gmailConnected, setGmailConnected] = useState(false);
+  const [gmailEmail, setGmailEmail] = useState("");
+  const [gmailLoading, setGmailLoading] = useState(false);
+
+  // Inbox state
+  const [emails, setEmails] = useState<EmailSummary[]>([]);
+  const [selectedEmail, setSelectedEmail] = useState<EmailDetail | null>(null);
+  const [inboxLoading, setInboxLoading] = useState(false);
+  const [inboxQuery, setInboxQuery] = useState("");
+  const [nextPageToken, setNextPageToken] = useState<string | null>(null);
+
   // Send email state
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
@@ -59,6 +84,138 @@ export default function Main() {
       toggleLoading(false);
     }
   }, [isReady, toggleLoading]);
+
+  // Check Gmail connection status when Gmail mode is selected
+  useEffect(() => {
+    if (mode === "gmail") {
+      checkGmailStatus();
+    }
+  }, [mode]);
+
+  async function checkGmailStatus() {
+    try {
+      const res = await fetch("/server-function/gmail-status");
+      const data = await res.json();
+      setGmailConnected(data.connected);
+      setGmailEmail(data.email || "");
+    } catch {
+      setGmailConnected(false);
+    }
+  }
+
+  async function handleGmailConnect() {
+    setGmailLoading(true);
+    try {
+      const res = await fetch("/server-function/gmail-auth");
+      const data = await res.json();
+      if (data.error) {
+        setStatus({ type: "error", message: data.error });
+        return;
+      }
+      // Open OAuth consent in a popup
+      const popup = window.open(data.url, "gmail-oauth", "width=500,height=600");
+
+      // Listen for the OAuth callback message
+      const handler = (event: MessageEvent) => {
+        if (event.data?.type === "gmail-oauth-callback") {
+          window.removeEventListener("message", handler);
+          popup?.close();
+          exchangeGmailCode(event.data.code);
+        }
+      };
+      window.addEventListener("message", handler);
+    } catch {
+      setStatus({ type: "error", message: "Failed to start Gmail authentication" });
+    } finally {
+      setGmailLoading(false);
+    }
+  }
+
+  async function exchangeGmailCode(code: string) {
+    setGmailLoading(true);
+    try {
+      const res = await fetch("/server-function/gmail-auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setGmailConnected(true);
+        setGmailEmail(data.email || "");
+        setStatus({ type: "success", message: `Connected to Gmail as ${data.email}` });
+      } else {
+        setStatus({ type: "error", message: data.error || "Failed to connect Gmail" });
+      }
+    } catch {
+      setStatus({ type: "error", message: "Failed to exchange Gmail authorization code" });
+    } finally {
+      setGmailLoading(false);
+    }
+  }
+
+  async function handleGmailDisconnect() {
+    await fetch("/server-function/gmail-status", { method: "DELETE" });
+    setGmailConnected(false);
+    setGmailEmail("");
+  }
+
+  const { runAppAction: runReadEmails } = useActionEffect(
+    {
+      actionName: "read-emails",
+      beforeAction: async (args: any) => args,
+      afterAction: async (result: any) => {
+        if (!result) return;
+        if (result.success && result.messages) {
+          setEmails(result.messages);
+          setNextPageToken(result.nextPageToken || null);
+        }
+        if (result.success && result.message) {
+          setSelectedEmail(result.message);
+        }
+        setInboxLoading(false);
+        return result;
+      },
+    },
+    [],
+  );
+
+  async function loadInbox(query?: string, pageToken?: string) {
+    if (!runReadEmails) return;
+    setInboxLoading(true);
+    setSelectedEmail(null);
+    try {
+      const result = await runReadEmails({
+        action: "list",
+        maxResults: 20,
+        ...(query ? { query } : {}),
+        ...(pageToken ? { pageToken } : {}),
+      });
+      if (result.success) {
+        if (pageToken) {
+          setEmails((prev) => [...prev, ...(result.messages || [])]);
+        } else {
+          setEmails(result.messages || []);
+        }
+        setNextPageToken(result.nextPageToken || null);
+      }
+    } finally {
+      setInboxLoading(false);
+    }
+  }
+
+  async function handleOpenEmail(messageId: string) {
+    if (!runReadEmails) return;
+    setInboxLoading(true);
+    try {
+      const result = await runReadEmails({ action: "get", messageId });
+      if (result.success) {
+        setSelectedEmail(result.message);
+      }
+    } finally {
+      setInboxLoading(false);
+    }
+  }
 
   const { runAppAction: runSendEmail } = useActionEffect(
     {
@@ -116,6 +273,7 @@ export default function Main() {
         to,
         subject,
         ...(mode === "byok" ? { apiKey } : {}),
+        ...(mode === "gmail" ? { provider: "gmail" } : {}),
         ...(from ? { from } : {}),
         ...(isHtml ? { html: body } : { text: body }),
       });
@@ -204,7 +362,21 @@ export default function Main() {
     }
   }
 
-  const canSend = to && subject && (mode === "managed" || apiKey);
+  function formatDate(dateStr: string): string {
+    try {
+      const d = new Date(dateStr);
+      const now = new Date();
+      if (d.toDateString() === now.toDateString()) {
+        return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      }
+      return d.toLocaleDateString([], { month: "short", day: "numeric" });
+    } catch {
+      return dateStr;
+    }
+  }
+
+  const canSend =
+    to && subject && (mode === "managed" || apiKey || (mode === "gmail" && gmailConnected));
   const canUseDomains = mode === "managed" || apiKey;
 
   return (
@@ -222,10 +394,15 @@ export default function Main() {
         <select
           className={`${inputClass} mt-1 cursor-pointer appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2216%22%20height%3D%2216%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%239ca3af%22%20stroke-width%3D%222%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_12px_center] bg-no-repeat pr-10`}
           value={mode}
-          onChange={(e) => setMode(e.target.value as Mode)}
+          onChange={(e) => {
+            const newMode = e.target.value as Mode;
+            setMode(newMode);
+            if (newMode === "gmail") setTab("send");
+          }}
         >
           <option value="managed">Pulse Editor</option>
           <option value="byok">Resend</option>
+          <option value="gmail">Gmail</option>
         </select>
       </div>
 
@@ -243,9 +420,43 @@ export default function Main() {
         </div>
       )}
 
+      {/* Gmail connection */}
+      {mode === "gmail" && (
+        <div className="px-5 pb-3">
+          {gmailConnected ? (
+            <div className="flex items-center justify-between bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2.5">
+              <div className="flex flex-col">
+                <span className="text-xs font-semibold text-emerald-700">Connected</span>
+                <span className="text-sm text-emerald-600">{gmailEmail}</span>
+              </div>
+              <button
+                className="text-xs text-red-400 hover:text-red-500 font-medium transition-colors"
+                onClick={handleGmailDisconnect}
+              >
+                Disconnect
+              </button>
+            </div>
+          ) : (
+            <button
+              className="w-full rounded-lg bg-white border border-gray-200 hover:bg-gray-50 active:scale-[0.98] text-gray-700 font-semibold py-2.5 px-4 transition-all shadow-sm flex items-center justify-center gap-x-2"
+              disabled={gmailLoading}
+              onClick={handleGmailConnect}
+            >
+              <svg className="w-4 h-4" viewBox="0 0 24 24">
+                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/>
+                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+              </svg>
+              {gmailLoading ? "Connecting..." : "Connect Gmail"}
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Tabs */}
       <div className="px-5 flex gap-x-1 border-b border-gray-200">
-        {(["send", "domains"] as Tab[]).map((t) => (
+        {(["send", ...(mode === "gmail" ? ["inbox"] : ["domains"])] as Tab[]).map((t) => (
           <button
             key={t}
             className={`px-4 py-2.5 text-sm font-medium capitalize transition-all border-b-2 -mb-px ${
@@ -271,7 +482,7 @@ export default function Main() {
               <input
                 className={`${inputClass} mt-1`}
                 type="email"
-                placeholder="you@yourdomain.com"
+                placeholder={mode === "gmail" && gmailEmail ? gmailEmail : "you@yourdomain.com"}
                 value={from}
                 onChange={(e) => setFrom(e.target.value)}
               />
@@ -494,6 +705,127 @@ export default function Main() {
               >
                 {domainStatus.message}
               </div>
+            )}
+          </>
+        )}
+
+        {tab === "inbox" && (
+          <>
+            {selectedEmail ? (
+              <div className="flex flex-col gap-y-3">
+                <button
+                  className="text-xs text-indigo-500 hover:text-indigo-600 font-medium self-start transition-colors"
+                  onClick={() => setSelectedEmail(null)}
+                >
+                  &larr; Back to inbox
+                </button>
+                <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+                  <h2 className="font-bold text-sm text-gray-900 mb-2">
+                    {selectedEmail.subject || "(no subject)"}
+                  </h2>
+                  <div className="flex flex-col gap-y-1 text-xs text-gray-500 mb-3 pb-3 border-b border-gray-100">
+                    <div>
+                      <span className="font-semibold text-gray-400">From:</span>{" "}
+                      {selectedEmail.from}
+                    </div>
+                    <div>
+                      <span className="font-semibold text-gray-400">To:</span>{" "}
+                      {selectedEmail.to}
+                    </div>
+                    <div>
+                      <span className="font-semibold text-gray-400">Date:</span>{" "}
+                      {selectedEmail.date}
+                    </div>
+                  </div>
+                  {selectedEmail.body?.html ? (
+                    <iframe
+                      srcDoc={selectedEmail.body.html}
+                      className="w-full min-h-[300px] border-0 rounded"
+                      sandbox="allow-same-origin"
+                      title="Email content"
+                    />
+                  ) : (
+                    <pre className="text-sm text-gray-700 whitespace-pre-wrap font-sans">
+                      {selectedEmail.body?.text || selectedEmail.snippet}
+                    </pre>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="flex gap-x-2">
+                  <input
+                    className={`${inputClass} flex-1`}
+                    type="text"
+                    placeholder="Search emails..."
+                    value={inboxQuery}
+                    onChange={(e) => setInboxQuery(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && loadInbox(inboxQuery)}
+                  />
+                  <button
+                    className="rounded-lg bg-indigo-500 hover:bg-indigo-600 active:scale-[0.98] disabled:opacity-40 disabled:active:scale-100 text-white text-sm font-semibold py-2.5 px-4 transition-all shadow-sm whitespace-nowrap"
+                    disabled={inboxLoading || !gmailConnected}
+                    onClick={() => loadInbox(inboxQuery)}
+                  >
+                    {inboxLoading ? "..." : "Search"}
+                  </button>
+                </div>
+
+                <button
+                  className="text-xs text-indigo-500 hover:text-indigo-600 font-medium self-start transition-colors"
+                  disabled={inboxLoading || !gmailConnected}
+                  onClick={() => loadInbox()}
+                >
+                  {inboxLoading ? "Loading..." : "Load recent emails"}
+                </button>
+
+                {emails.length > 0 && (
+                  <div className="flex flex-col gap-y-1">
+                    {emails.map((e) => (
+                      <button
+                        key={e.id}
+                        className="bg-white border border-gray-200 rounded-lg p-3 shadow-sm transition-shadow hover:shadow text-left"
+                        onClick={() => handleOpenEmail(e.id)}
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <span
+                            className={`text-xs truncate max-w-[200px] ${
+                              e.isUnread
+                                ? "font-bold text-gray-900"
+                                : "font-medium text-gray-600"
+                            }`}
+                          >
+                            {e.from?.replace(/<.*>/, "").trim() || e.from}
+                          </span>
+                          <span className="text-[10px] text-gray-400 whitespace-nowrap ml-2">
+                            {formatDate(e.date)}
+                          </span>
+                        </div>
+                        <div
+                          className={`text-sm truncate ${
+                            e.isUnread ? "font-semibold text-gray-800" : "text-gray-700"
+                          }`}
+                        >
+                          {e.subject || "(no subject)"}
+                        </div>
+                        <div className="text-xs text-gray-400 truncate mt-0.5">
+                          {e.snippet}
+                        </div>
+                      </button>
+                    ))}
+
+                    {nextPageToken && (
+                      <button
+                        className="text-xs text-indigo-500 hover:text-indigo-600 font-medium self-center py-2 transition-colors"
+                        disabled={inboxLoading}
+                        onClick={() => loadInbox(inboxQuery, nextPageToken)}
+                      >
+                        {inboxLoading ? "Loading..." : "Load more"}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </>
             )}
           </>
         )}

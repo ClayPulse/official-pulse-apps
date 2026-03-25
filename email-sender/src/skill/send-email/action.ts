@@ -3,6 +3,7 @@
  * @property {string} to - The recipient email address.
  * @property {string} subject - The email subject line.
  * @property {string} [apiKey] - The Resend API key (optional, uses Pulse Editor managed service if omitted).
+ * @property {string} [provider] - The email provider to use: "gmail" for Gmail OAuth, omit for Resend/managed.
  * @property {string} [from] - The sender email address (defaults to onboarding@resend.dev).
  * @property {string} [html] - The HTML body of the email.
  * @property {string} [text] - The plain text body of the email.
@@ -11,6 +12,7 @@ type Input = {
   to: string;
   subject: string;
   apiKey?: string;
+  provider?: string;
   from?: string;
   html?: string;
   text?: string;
@@ -40,6 +42,7 @@ export default async function sendEmail({
   to,
   subject,
   apiKey,
+  provider,
   from,
   html,
   text,
@@ -51,6 +54,7 @@ export default async function sendEmail({
       to,
       subject,
       ...(apiKey ? { apiKey } : {}),
+      ...(provider ? { provider } : {}),
       ...(from ? { from } : {}),
       ...(html ? { html } : { text: text || "" }),
     }),
