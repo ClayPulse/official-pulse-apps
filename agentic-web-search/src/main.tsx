@@ -3,6 +3,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import "./tailwind.css";
 import { useActionEffect, useLoading } from "@pulse-editor/react-api";
+import { setPendingResult } from "./skill/web-search/action";
 
 type SearchStatus = "idle" | "searching" | "done" | "error";
 type Source = { url: string; title: string; page_age?: string };
@@ -20,13 +21,17 @@ export default function Main() {
   const [errorMsg, setErrorMsg] = useState("");
   const abortRef = useRef<AbortController | null>(null);
 
-  const startSearch = useCallback(async (searchQuery: string, searchProvider: Provider, signal?: AbortSignal) => {
+  const startSearch = useCallback(async (searchQuery: string, searchProvider: Provider, signal?: AbortSignal): Promise<{ summary: string; urls: string[]; sources: Source[] }> => {
     setStatus("searching");
     setSitesSearched(0);
     setIsGenerating(false);
     setSources([]);
     setSummary("");
     setErrorMsg("");
+
+    let finalSummary = "";
+    let finalUrls: string[] = [];
+    let finalSources: Source[] = [];
 
     try {
       const response = await fetch("/server-function/web-search", {
@@ -67,12 +72,16 @@ export default function Main() {
             setIsGenerating(true);
           } else if (data.type === "text_delta") {
             setIsGenerating(false);
+            finalSummary += data.text as string;
             setSummary((prev) => prev + (data.text as string));
           } else if (data.type === "search_error") {
             console.warn("Web search error:", data.error_code);
           } else if (data.type === "result") {
-            setSummary(data.summary as string);
-            if (Array.isArray(data.sources)) setSources(data.sources as Source[]);
+            finalSummary = data.summary as string;
+            finalUrls = (data.urls as string[]) ?? [];
+            finalSources = (data.sources as Source[]) ?? [];
+            setSummary(finalSummary);
+            if (Array.isArray(data.sources)) setSources(finalSources);
             setStatus("done");
           } else if (data.type === "error") {
             setErrorMsg(data.message as string);
@@ -88,6 +97,8 @@ export default function Main() {
         setStatus("error");
       }
     }
+
+    return { summary: finalSummary, urls: finalUrls, sources: finalSources };
   }, []);
 
   useEffect(() => {
@@ -101,8 +112,8 @@ export default function Main() {
         abortRef.current?.abort();
         abortRef.current = null;
         setQuery(args.query ?? "");
-        // Kick off streaming immediately — don't wait for action.ts
-        void startSearch(args.query ?? "", provider);
+        const result = await startSearch(args.query ?? "", provider);
+        setPendingResult(result);
         return args;
       },
       afterAction: async () => {

@@ -6,6 +6,12 @@ type Input = {
   query: string;
 };
 
+let _pendingResult: Output | null = null;
+
+export function setPendingResult(result: Output) {
+  _pendingResult = result;
+}
+
 /**
  * @typedef {Object} Source
  * @property {string} url - The URL of the source page.
@@ -36,6 +42,12 @@ type Output = {
  * @returns {Promise<Output>} - The output containing the summary, URLs, sources, and citations from the search results.
  */
 export default async function webSearch({ query }: Input): Promise<Output> {
+  if (_pendingResult) {
+    const result = _pendingResult;
+    _pendingResult = null;
+    return result;
+  }
+
   const response = await fetch("/server-function/web-search", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

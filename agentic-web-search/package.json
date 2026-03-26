@@ -2,7 +2,7 @@
   "name": "agentic_web_search",
   "displayName": "Agentic Web Search",
   "description": "A template for creating Pulse App",
-  "version": "0.0.16",
+  "version": "0.0.17",
   "private": true,
   "type": "module",
   "scripts": {
