@@ -1,0 +1,67 @@
+/**
+ * @typedef {Object} Input - Input parameters for Kontext app image editing.
+ * @property {string} prompt - Text instruction for the image edit.
+ * @property {string} image_url - URL of the image to transform.
+ * @property {string} [model] - Kontext app model ID (defaults to "flux-kontext-apps/cartoonify").
+ * @property {Record<string, any>} [input] - Additional model-specific parameters.
+ */
+type Input = {
+  prompt: string;
+  image_url: string;
+  model?: string;
+  input?: Record<string, any>;
+};
+
+/**
+ * @typedef {Object} Output - The output of the Kontext app.
+ * @property {string} id - The prediction ID.
+ * @property {string} status - The prediction status.
+ * @property {any} output - The transformed image URLs or data.
+ * @property {Record<string, any>} [metrics] - Prediction metrics.
+ * @property {string} [error] - Error message if failed.
+ */
+type Output = {
+  id: string;
+  status: string;
+  output: any;
+  metrics?: Record<string, any>;
+  error?: string;
+};
+
+/**
+ * Edit or transform an image using a FLUX Kontext app on Replicate.
+ *
+ * @param {Input} input - The prompt, image URL, optional model, and extra parameters.
+ *
+ * @returns {Promise<Output>} The prediction result with transformed image.
+ */
+export default async function kontextApps({
+  prompt,
+  image_url,
+  model = "flux-kontext-apps/cartoonify",
+  input: extraInput = {},
+}: Input): Promise<Output> {
+  const res = await fetch("/server-function/run-prediction", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ model, input: { prompt, image_url, ...extraInput } }),
+  });
+
+  const data = await res.json();
+
+  if (!res.ok) {
+    return {
+      id: data.prediction?.id ?? "",
+      status: "failed",
+      output: null,
+      error: data.details || data.error || "Unknown error",
+    };
+  }
+
+  return {
+    id: data.id,
+    status: data.status,
+    output: data.output,
+    metrics: data.metrics,
+  };
+}

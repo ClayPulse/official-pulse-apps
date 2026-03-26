@@ -46,7 +46,7 @@ export default async function runModel({ model, input }: Input): Promise<Output>
       id: data.prediction?.id ?? "",
       status: "failed",
       output: null,
-      error: data.error || "Unknown error",
+      error: data.details || data.error || "Unknown error",
     };
   }
 
