@@ -6,9 +6,11 @@ import { useActionEffect, useLoading } from "@pulse-editor/react-api";
 
 type SearchStatus = "idle" | "searching" | "done" | "error";
 type Source = { url: string; title: string; page_age?: string };
+type Provider = "claude" | "openai";
 
 export default function Main() {
   const { isReady, toggleLoading } = useLoading();
+  const [provider, setProvider] = useState<Provider>("claude");
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<SearchStatus>("idle");
   const [sitesSearched, setSitesSearched] = useState(0);
@@ -18,7 +20,7 @@ export default function Main() {
   const [errorMsg, setErrorMsg] = useState("");
   const abortRef = useRef<AbortController | null>(null);
 
-  const startSearch = useCallback(async (searchQuery: string, signal?: AbortSignal) => {
+  const startSearch = useCallback(async (searchQuery: string, searchProvider: Provider, signal?: AbortSignal) => {
     setStatus("searching");
     setSitesSearched(0);
     setIsGenerating(false);
@@ -30,7 +32,7 @@ export default function Main() {
       const response = await fetch("/server-function/web-search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: searchQuery.trim() }),
+        body: JSON.stringify({ query: searchQuery.trim(), provider: searchProvider }),
         signal,
       });
 
@@ -100,14 +102,14 @@ export default function Main() {
         abortRef.current = null;
         setQuery(args.query ?? "");
         // Kick off streaming immediately — don't wait for action.ts
-        void startSearch(args.query ?? "");
+        void startSearch(args.query ?? "", provider);
         return args;
       },
       afterAction: async () => {
         // Streaming handles its own state — nothing to do here
       },
     },
-    [startSearch],
+    [startSearch, provider],
   );
 
   const handleSearch = async () => {
@@ -115,7 +117,7 @@ export default function Main() {
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
-    await startSearch(query, controller.signal);
+    await startSearch(query, provider, controller.signal);
   };
 
   return (
@@ -124,6 +126,24 @@ export default function Main() {
       <h1 className="shrink-0 text-base font-semibold text-gray-200 tracking-tight">
         Agentic Web Search
       </h1>
+
+      {/* Provider selector */}
+      <div className="shrink-0 flex gap-1 bg-gray-900 border border-gray-800 rounded-lg p-1">
+        {(["claude", "openai"] as Provider[]).map((p) => (
+          <button
+            key={p}
+            onClick={() => setProvider(p)}
+            disabled={status === "searching"}
+            className={`flex-1 py-1 px-3 rounded-md text-xs font-medium transition-colors cursor-pointer disabled:cursor-not-allowed ${
+              provider === p
+                ? "bg-gray-700 text-gray-100"
+                : "text-gray-500 hover:text-gray-300"
+            }`}
+          >
+            {p === "claude" ? "Claude" : "OpenAI"}
+          </button>
+        ))}
+      </div>
 
       {/* Main layout — 1 : 2 : 1 */}
       <div className="flex flex-col flex-1 gap-3 min-h-0">
