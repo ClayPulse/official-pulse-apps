@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from "react";
 import "./tailwind.css";
-import { useLoading, useActionEffect } from "@pulse-editor/react-api";
+import { useLoading, useActionEffect, useOAuth } from "@pulse-editor/react-api";
+
+const APP_ID = "email_sender";
+const OAUTH_PROVIDER = "gmail";
 
 type Mode = "managed" | "byok" | "gmail";
 type Tab = "send" | "domains" | "inbox";
@@ -41,14 +44,15 @@ const labelClass = "text-xs font-semibold text-gray-500 uppercase tracking-wide"
 
 export default function Main() {
   const { isReady, toggleLoading } = useLoading();
+  const {
+    isLoading: gmailLoading,
+    isAuthenticated: gmailConnected,
+    connect: connectGmail,
+    disconnect: disconnectGmail,
+  } = useOAuth(APP_ID, OAUTH_PROVIDER);
   const [tab, setTab] = useState<Tab>("send");
   const [mode, setMode] = useState<Mode>("managed");
   const [apiKey, setApiKey] = useState("");
-
-  // Gmail state
-  const [gmailConnected, setGmailConnected] = useState(false);
-  const [gmailEmail, setGmailEmail] = useState("");
-  const [gmailLoading, setGmailLoading] = useState(false);
 
   // Inbox state
   const [emails, setEmails] = useState<EmailSummary[]>([]);
@@ -85,113 +89,45 @@ export default function Main() {
     }
   }, [isReady, toggleLoading]);
 
-  // Check Gmail connection status when Gmail mode is selected
-  useEffect(() => {
-    if (mode === "gmail") {
-      checkGmailStatus();
-    }
-  }, [mode]);
-
-  async function checkGmailStatus() {
-    try {
-      const res = await fetch("/server-function/gmail-status");
-      const data = await res.json();
-      setGmailConnected(data.connected);
-      setGmailEmail(data.email || "");
-    } catch {
-      setGmailConnected(false);
-    }
-  }
-
   async function handleGmailConnect() {
-    setGmailLoading(true);
     try {
-      const res = await fetch("/server-function/gmail-auth");
-      const data = await res.json();
-      if (data.error) {
-        setStatus({ type: "error", message: data.error });
-        return;
-      }
-      // Open OAuth consent in a popup
-      const popup = window.open(data.url, "gmail-oauth", "width=500,height=600");
-
-      // Listen for the OAuth callback message
-      const handler = (event: MessageEvent) => {
-        if (event.data?.type === "gmail-oauth-callback") {
-          window.removeEventListener("message", handler);
-          popup?.close();
-          exchangeGmailCode(event.data.code);
-        }
-      };
-      window.addEventListener("message", handler);
-    } catch {
-      setStatus({ type: "error", message: "Failed to start Gmail authentication" });
-    } finally {
-      setGmailLoading(false);
-    }
-  }
-
-  async function exchangeGmailCode(code: string) {
-    setGmailLoading(true);
-    try {
-      const res = await fetch("/server-function/gmail-auth", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code }),
+      await connectGmail({
+        provider: OAUTH_PROVIDER,
+        authorizationUrl: "https://accounts.google.com/o/oauth2/v2/auth",
+        tokenEndpoint: "https://oauth2.googleapis.com/token",
+        scope: [
+          "https://www.googleapis.com/auth/gmail.send",
+          "https://www.googleapis.com/auth/gmail.readonly",
+          "https://www.googleapis.com/auth/userinfo.email",
+        ].join(" "),
+        additionalParams: { access_type: "offline", prompt: "consent" },
       });
-      const data = await res.json();
-      if (data.success) {
-        setGmailConnected(true);
-        setGmailEmail(data.email || "");
-        setStatus({ type: "success", message: `Connected to Gmail as ${data.email}` });
-      } else {
-        setStatus({ type: "error", message: data.error || "Failed to connect Gmail" });
-      }
     } catch {
-      setStatus({ type: "error", message: "Failed to exchange Gmail authorization code" });
-    } finally {
-      setGmailLoading(false);
+      setStatus({ type: "error", message: "Failed to connect Gmail" });
     }
   }
 
   async function handleGmailDisconnect() {
-    await fetch("/server-function/gmail-status", { method: "DELETE" });
-    setGmailConnected(false);
-    setGmailEmail("");
+    await disconnectGmail();
   }
 
-  const { runAppAction: runReadEmails } = useActionEffect(
-    {
-      actionName: "read-emails",
-      beforeAction: async (args: any) => args,
-      afterAction: async (result: any) => {
-        if (!result) return;
-        if (result.success && result.messages) {
-          setEmails(result.messages);
-          setNextPageToken(result.nextPageToken || null);
-        }
-        if (result.success && result.message) {
-          setSelectedEmail(result.message);
-        }
-        setInboxLoading(false);
-        return result;
-      },
-    },
-    [],
-  );
 
   async function loadInbox(query?: string, pageToken?: string) {
-    if (!runReadEmails) return;
     setInboxLoading(true);
     setSelectedEmail(null);
     try {
-      const result = await runReadEmails({
-        action: "list",
-        maxResults: 20,
-        ...(query ? { query } : {}),
-        ...(pageToken ? { pageToken } : {}),
+      const res = await fetch("/server-function/gmail-messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "list",
+          maxResults: 20,
+          ...(query ? { query } : {}),
+          ...(pageToken ? { pageToken } : {}),
+        }),
       });
-      if (result.success) {
+      const result = await res.json();
+      if (res.ok) {
         if (pageToken) {
           setEmails((prev) => [...prev, ...(result.messages || [])]);
         } else {
@@ -205,12 +141,16 @@ export default function Main() {
   }
 
   async function handleOpenEmail(messageId: string) {
-    if (!runReadEmails) return;
     setInboxLoading(true);
     try {
-      const result = await runReadEmails({ action: "get", messageId });
-      if (result.success) {
-        setSelectedEmail(result.message);
+      const res = await fetch("/server-function/gmail-messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "get", messageId }),
+      });
+      const result = await res.json();
+      if (res.ok) {
+        setSelectedEmail(result);
       }
     } finally {
       setInboxLoading(false);
@@ -221,7 +161,11 @@ export default function Main() {
     {
       actionName: "send-email",
       beforeAction: async (args: any) => {
-        return args;
+        return {
+          ...args,
+          ...(mode === "gmail" ? { provider: "gmail" } : {}),
+          ...(mode === "byok" && apiKey ? { apiKey } : {}),
+        };
       },
       afterAction: async (result: any) => {
         if (!result) return;
@@ -240,29 +184,9 @@ export default function Main() {
         return result;
       },
     },
-    [],
+    [mode, apiKey],
   );
 
-  const { runAppAction: runManageDomains } = useActionEffect(
-    {
-      actionName: "manage-domains",
-      beforeAction: async (args: any) => {
-        return args;
-      },
-      afterAction: async (result: any) => {
-        if (!result) return;
-        if (!result.success) {
-          setDomainStatus({
-            type: "error",
-            message: result.error || "Operation failed",
-          });
-        }
-        setDomainLoading(false);
-        return result;
-      },
-    },
-    [],
-  );
 
   async function handleSend() {
     if (!runSendEmail) return;
@@ -294,22 +218,32 @@ export default function Main() {
     action: string,
     params: Record<string, unknown> = {},
   ) {
-    if (!runManageDomains) return null;
     setDomainLoading(true);
     setDomainStatus(null);
     try {
-      const result = await runManageDomains({
-        action,
-        ...(mode === "byok" ? { apiKey } : {}),
-        ...params,
+      const res = await fetch("/server-function/domains", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action,
+          ...(mode === "byok" ? { apiKey } : {}),
+          ...params,
+        }),
       });
-      if (!result.success) {
+      const data = await res.json();
+      if (!res.ok) {
         setDomainStatus({
           type: "error",
-          message: result.error || "Operation failed",
+          message: data.error || "Operation failed",
         });
+        return { success: false, error: data.error };
       }
-      return result;
+      // Normalize list response
+      if (action === "list") {
+        const items = Array.isArray(data) ? data : data.data || [];
+        return { success: true, data: items };
+      }
+      return { success: true, data };
     } finally {
       setDomainLoading(false);
     }
@@ -427,7 +361,6 @@ export default function Main() {
             <div className="flex items-center justify-between bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2.5">
               <div className="flex flex-col">
                 <span className="text-xs font-semibold text-emerald-700">Connected</span>
-                <span className="text-sm text-emerald-600">{gmailEmail}</span>
               </div>
               <button
                 className="text-xs text-red-400 hover:text-red-500 font-medium transition-colors"
@@ -482,7 +415,7 @@ export default function Main() {
               <input
                 className={`${inputClass} mt-1`}
                 type="email"
-                placeholder={mode === "gmail" && gmailEmail ? gmailEmail : "you@yourdomain.com"}
+                placeholder="you@yourdomain.com"
                 value={from}
                 onChange={(e) => setFrom(e.target.value)}
               />

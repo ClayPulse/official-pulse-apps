@@ -2,7 +2,7 @@
   "name": "email_sender",
   "displayName": "Email Sender",
   "description": "Send emails using the Resend API",
-  "version": "0.0.1",
+  "version": "0.0.5",
   "private": true,
   "type": "module",
   "scripts": {

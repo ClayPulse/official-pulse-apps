@@ -7,8 +7,6 @@
  * - BYOK: calls the Resend API directly with the user-provided key
  * - Managed: proxies to the configured Pulse Editor backend
  */
-import { getValidAccessToken, gmailTokenStore } from "./gmail-auth";
-
 export default async function sendEmail(req: Request) {
   if (req.method !== "POST") {
     return new Response("Method Not Allowed", { status: 405 });
@@ -25,7 +23,7 @@ export default async function sendEmail(req: Request) {
 
   // Gmail mode: send via Gmail API
   if (provider === "gmail") {
-    const accessToken = await getValidAccessToken();
+    const accessToken = process.env.OAUTH_GMAIL_ACCESSTOKEN;
     if (!accessToken) {
       return new Response(
         JSON.stringify({ error: "Gmail not connected. Please connect your Gmail account first." }),
@@ -33,8 +31,7 @@ export default async function sendEmail(req: Request) {
       );
     }
 
-    const senderEmail = gmailTokenStore.email || "me";
-    const fromHeader = from || senderEmail;
+    const fromHeader = from || "me";
 
     // Build RFC 2822 email message
     const messageParts = [

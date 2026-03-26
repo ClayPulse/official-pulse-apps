@@ -6,14 +6,12 @@
  * - list: list messages (optional query, maxResults)
  * - get: get a single message by id
  */
-import { getValidAccessToken } from "./gmail-auth";
-
 export default async function gmailMessages(req: Request) {
   if (req.method !== "POST") {
     return new Response("Method Not Allowed", { status: 405 });
   }
 
-  const accessToken = await getValidAccessToken();
+  const accessToken = process.env.OAUTH_GMAIL_ACCESSTOKEN;
   if (!accessToken) {
     return json({ error: "Gmail not connected" }, 401);
   }
