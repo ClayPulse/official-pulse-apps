@@ -4,13 +4,15 @@ import OpenAI from "openai";
 type Source = { url: string; title: string; page_age?: string };
 type Citation = { url: string; title: string; cited_text: string };
 type Provider = "claude" | "openai";
+type ClaudeModel = "claude-opus-4-6" | "claude-sonnet-4-6";
+type OpenAIModel = "gpt-5.4" | "gpt-5-mini";
 
 export default async function webSearch(req: Request): Promise<Response> {
   if (req.method !== "POST") {
     return new Response("Method Not Allowed", { status: 405 });
   }
 
-  const { query, provider = "claude" } = await req.json();
+  const { query, provider = "claude", model } = await req.json();
 
   if (!query?.trim()) {
     return new Response(JSON.stringify({ error: "Query is required" }), {
@@ -29,9 +31,9 @@ export default async function webSearch(req: Request): Promise<Response> {
 
       try {
         if ((provider as Provider) === "openai") {
-          await runOpenAI(query.trim(), send);
+          await runOpenAI(query.trim(), send, (model as OpenAIModel) ?? "gpt-5.4");
         } else {
-          await runClaude(query.trim(), send);
+          await runClaude(query.trim(), send, (model as ClaudeModel) ?? "claude-sonnet-4-6");
         }
       } catch (error) {
         send({ type: "error", message: String(error) });
@@ -50,7 +52,7 @@ export default async function webSearch(req: Request): Promise<Response> {
   });
 }
 
-async function runClaude(query: string, send: (data: object) => void) {
+async function runClaude(query: string, send: (data: object) => void, model: ClaudeModel) {
   const client = new Anthropic();
   let sitesSearched = 0;
   let finalText = "";
@@ -59,7 +61,7 @@ async function runClaude(query: string, send: (data: object) => void) {
   const citations: Citation[] = [];
 
   const msgStream = client.messages.stream({
-    model: "claude-haiku-4-5",
+    model,
     max_tokens: 8096,
     tools: [
       {
@@ -133,7 +135,7 @@ async function runClaude(query: string, send: (data: object) => void) {
   send({ type: "result", summary: finalText, sources, citations, urls: sources.map((s) => s.url) });
 }
 
-async function runOpenAI(query: string, send: (data: object) => void) {
+async function runOpenAI(query: string, send: (data: object) => void, model: OpenAIModel) {
   const client = new OpenAI();
   const sources: Source[] = [];
   let finalText = "";
@@ -141,7 +143,7 @@ async function runOpenAI(query: string, send: (data: object) => void) {
   send({ type: "generating" });
 
   const stream = await client.responses.create({
-    model: "gpt-5.4",
+    model,
     tools: [{ type: "web_search" }],
     input: `Search the web and provide a comprehensive, well-structured summary about: ${query}. Search multiple relevant sources and synthesize the information clearly.`,
     stream: true,

@@ -2,16 +2,31 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import "./tailwind.css";
-import { useActionEffect, useLoading } from "@pulse-editor/react-api";
+import { useActionEffect, useLoading, useSnapshotState, SnapshotProvider } from "@pulse-editor/react-api";
 import { setPendingResult } from "./skill/web-search/action";
 
 type SearchStatus = "idle" | "searching" | "done" | "error";
 type Source = { url: string; title: string; page_age?: string };
 type Provider = "claude" | "openai";
+type ClaudeModel = "claude-opus-4-6" | "claude-sonnet-4-6";
+type OpenAIModel = "gpt-5.4" | "gpt-5-mini";
+type Model = ClaudeModel | OpenAIModel;
 
-export default function Main() {
+const CLAUDE_MODELS: { value: ClaudeModel; label: string }[] = [
+  { value: "claude-sonnet-4-6", label: "Sonnet 4.6" },
+  { value: "claude-opus-4-6", label: "Opus 4.6" },
+];
+
+const OPENAI_MODELS: { value: OpenAIModel; label: string }[] = [
+  { value: "gpt-5.4", label: "GPT-5.4" },
+  { value: "gpt-5-mini", label: "GPT-5 Mini" },
+];
+
+function App() {
   const { isReady, toggleLoading } = useLoading();
-  const [provider, setProvider] = useState<Provider>("claude");
+  const [provider, setProvider] = useSnapshotState<Provider>("provider", "claude");
+  const [claudeModel, setClaudeModel] = useSnapshotState<ClaudeModel>("claudeModel", "claude-sonnet-4-6");
+  const [openaiModel, setOpenaiModel] = useSnapshotState<OpenAIModel>("openaiModel", "gpt-5.4");
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<SearchStatus>("idle");
   const [sitesSearched, setSitesSearched] = useState(0);
@@ -21,7 +36,9 @@ export default function Main() {
   const [errorMsg, setErrorMsg] = useState("");
   const abortRef = useRef<AbortController | null>(null);
 
-  const startSearch = useCallback(async (searchQuery: string, searchProvider: Provider, signal?: AbortSignal): Promise<{ summary: string; urls: string[]; sources: Source[] }> => {
+  const activeModel: Model = provider === "claude" ? claudeModel : openaiModel;
+
+  const startSearch = useCallback(async (searchQuery: string, searchProvider: Provider, searchModel: Model, signal?: AbortSignal): Promise<{ summary: string; urls: string[]; sources: Source[] }> => {
     setStatus("searching");
     setSitesSearched(0);
     setIsGenerating(false);
@@ -37,7 +54,7 @@ export default function Main() {
       const response = await fetch("/server-function/web-search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: searchQuery.trim(), provider: searchProvider }),
+        body: JSON.stringify({ query: searchQuery.trim(), provider: searchProvider, model: searchModel }),
         signal,
       });
 
@@ -112,7 +129,7 @@ export default function Main() {
         abortRef.current?.abort();
         abortRef.current = null;
         setQuery(args.query ?? "");
-        const result = await startSearch(args.query ?? "", provider);
+        const result = await startSearch(args.query ?? "", provider, activeModel);
         setPendingResult(result);
         return args;
       },
@@ -120,7 +137,7 @@ export default function Main() {
         // Streaming handles its own state — nothing to do here
       },
     },
-    [startSearch, provider],
+    [startSearch, provider, activeModel],
   );
 
   const handleSearch = async () => {
@@ -128,8 +145,10 @@ export default function Main() {
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
-    await startSearch(query, provider, controller.signal);
+    await startSearch(query, provider, activeModel, controller.signal);
   };
+
+  const modelOptions = provider === "claude" ? CLAUDE_MODELS : OPENAI_MODELS;
 
   return (
     <div className="flex flex-col h-full p-4 gap-3 overflow-hidden bg-gray-950 text-gray-100">
@@ -156,10 +175,31 @@ export default function Main() {
         ))}
       </div>
 
-      {/* Main layout — 1 : 2 : 1 */}
+      {/* Model selector */}
+      <div className="shrink-0 flex gap-1 bg-gray-900 border border-gray-800 rounded-lg p-1">
+        {modelOptions.map(({ value, label }) => {
+          const isActive = (provider === "claude" ? claudeModel : openaiModel) === value;
+          return (
+            <button
+              key={value}
+              onClick={() => provider === "claude" ? setClaudeModel(value as ClaudeModel) : setOpenaiModel(value as OpenAIModel)}
+              disabled={status === "searching"}
+              className={`flex-1 py-1 px-3 rounded-md text-xs font-medium transition-colors cursor-pointer disabled:cursor-not-allowed ${
+                isActive
+                  ? "bg-gray-700 text-gray-100"
+                  : "text-gray-500 hover:text-gray-300"
+              }`}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Main layout */}
       <div className="flex flex-col flex-1 gap-3 min-h-0">
 
-        {/* Prompt section — 1 part */}
+        {/* Prompt section */}
         <div className="flex-1 flex flex-col gap-2 min-h-0">
           <textarea
             className="flex-1 w-full bg-gray-900 border border-gray-700 text-gray-100 rounded-lg p-3 resize-none text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-colors min-h-0"
@@ -207,7 +247,7 @@ export default function Main() {
           )}
         </div>
 
-        {/* Summary section — 2 parts */}
+        {/* Summary section */}
         {(status === "searching" || status === "done") && (
           <div className="flex-2 flex flex-col gap-1 min-h-0">
             <div className="shrink-0 flex items-center justify-between">
@@ -245,7 +285,7 @@ export default function Main() {
           </div>
         )}
 
-        {/* Sources section — 1 part */}
+        {/* Sources section */}
         {sources.length > 0 && (
           <div className="flex-1 flex flex-col gap-1 min-h-0">
             <span className="shrink-0 text-xs font-medium text-gray-500 uppercase tracking-wide">
@@ -277,5 +317,13 @@ export default function Main() {
 
       </div>
     </div>
+  );
+}
+
+export default function Main() {
+  return (
+    <SnapshotProvider>
+      <App />
+    </SnapshotProvider>
   );
 }

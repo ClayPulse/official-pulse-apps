@@ -22,6 +22,10 @@ type Output = {
  * @returns {Output} The parsed result.
  */
 export default function parseJson({ stringValue }: Input): Output {
-  const parsedObject = JSON.parse(stringValue);
+  const trimmed = stringValue.trim();
+  const jsonStr = trimmed.startsWith("```")
+    ? trimmed.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "")
+    : trimmed;
+  const parsedObject = JSON.parse(jsonStr);
   return { parsedObject };
 }

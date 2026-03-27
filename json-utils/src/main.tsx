@@ -47,6 +47,16 @@ export default function Main() {
     []
   );
 
+  useActionEffect(
+    {
+      actionName: "get-field",
+      beforeAction: async (input) => input,
+      afterAction: async (output) => output,
+    },
+    []
+  );
+
+
   return (
     <div className="p-2 flex flex-col">
       <h1 className="text-2xl font-bold mb-4">Pulse App JSON Utils</h1>

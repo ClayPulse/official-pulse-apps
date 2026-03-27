@@ -64,6 +64,21 @@ export default function Main() {
     [],
   );
 
+  useActionEffect(
+    {
+      actionName: "get-opened-note",
+      beforeAction: async (args: Record<string, unknown>) => {
+        return {
+          ...args,
+          title: selectedTitle,
+          note: selectedMeeting?.note ?? "",
+          transcript: selectedMeeting?.transcript ?? "",
+        };
+      },
+    },
+    [selectedMeeting, selectedTitle],
+  );
+
   // ── OAuth login ─────────────────────────────────────────────────────────
   const startOAuth = useCallback(async () => {
     setLoading(true);

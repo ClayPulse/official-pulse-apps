@@ -1,0 +1,196 @@
+# Pulse App Template
+
+This is a React full-stack template which you can use to make your own Pulse Editor app. It uses Module Federation to share modules with Pulse Editor, which enables full-stack app collaboration in a canvas workflow (see [Pulse Editor](https://github.com/claypulse/pulse-editor)).
+
+For more information about Pulse Editor core and its ecosystem, visit our [Pulse Editor GitHub](https://github.com/claypulse/pulse-editor) and [documentation](https://docs.pulse-editor.com).
+
+## Get Started
+
+### Create a Pulse Editor extension app using the CLI
+
+```bash
+# Install Pulse Editor CLI
+npm i -g @pulse-editor/cli
+# Use CLI to create a React template project (based on this repository)
+pulse create
+```
+
+### Start development
+
+#### Method 1: Install your extension in Pulse Editor as a dev extension
+
+Run the following to start a dev server locally:
+
+```bash
+npm run dev
+```
+
+This will host your extension at `http://localhost:3030`. To install the local app in dev mode, go to Settings in Pulse Editor UI; then fill in your extension dev server's information. You will need:
+
+- **Dev server:** e.g. `http://localhost:3030`
+- **Extension ID:** `name` in `package.json` (this field must not contain hyphens '-')
+- **Version:** `version` in `package.json`
+
+#### Method 2: Preview your extension in the browser
+
+If you'd like to quickly develop your extension without installing it inside Pulse Editor, you can run a browser preview:
+
+```bash
+npm run preview
+```
+
+> **Note:** Your extension won't be able to use IMC (Inter-Module-Communication) to communicate with Pulse Editor in preview mode.
+
+---
+
+## Project Structure
+
+### Frontend (`src/main.tsx`)
+
+`main.tsx` is the main entry point for your extension's React UI. Pulse Editor loads this as the extension's frontend.
+
+Add React components inside `/src` to build your extension's UI.
+
+### Backend (`src/server-function/`)
+
+Server functions are backend HTTP handlers defined as default exports in files under `src/server-function/`. Each file must export a default `async function(req: Request): Promise<Response>`. The file path maps directly to its URL endpoint:
+
+- `src/server-function/echo.ts` → `POST /server-function/echo`
+- `src/server-function/hello/hello-world.ts` → `GET /server-function/hello/hello-world`
+
+### Skills & App Actions (`src/skill/`)
+
+Anthropic skill format with YAML frontmatter can be used to define agentic capabilities in Pulse Editor. In addition,
+Pulse Editor adds an `action.ts` file that allows agents to run in frontend by subscribing to its execution via `useActionEffect`, and backend execution via the Pulse Editor automation platform or AI agents.
+
+App Actions are callable from three places:
+
+1. **AI agents** — Pulse Editor agents can invoke the skill directly.
+2. **Frontend** — via `runAppAction` returned from `useActionEffect` in any React component. To display and produce UI results in the Pulse Editor workflow canvas view, it is recommended to use useActionEffect to perform UI updates before and after the action execution. Generally speaking, useActionEffect should handle similar UI logics as if the action is invoked from the frontend. For example, normally a user might interact with a button to trigger an action; useActionEffect allows an AI agent to trigger the same action without directly interacting with the button, but the UI needs to update accordingly as if the button is clicked with `beforeAction` and `afterAction`.
+3. **Backend** — via the Pulse Editor automation platform at `https://pulse-editor.com/api/skill/{appId}/{version}/{skillName}`. For example, the `example-skill` in this repo is accessible at `https://pulse-editor.com/api/skill/pulse_app_template/0.0.1/example-skill`.
+
+**Create Agent Skill Action with CLI**
+
+Run the following command and follow the prompts to create a new skill action.
+
+```bash
+pulse skill create
+```
+
+---
+
+## Pulse Editor Libraries
+
+### `@pulse-editor/shared-utils`
+
+Provides shared utilities such as types used across your extension.
+
+### `@pulse-editor/react-api`
+
+Provides React hooks for interacting with Pulse Editor's frontend environment:
+
+- **`useLoading()`** — Controls the loading state shown by Pulse Editor while the app initializes --this is not meant for Pulse App's internal loading states, but rather to notify Pulse Editor if the app as a whole is ready to be interacted with. For internal loading states, use your own React state management.
+- **`useActionEffect(config, deps)`** — Registers an App Action handler. The `actionName` must match the skill's `action.ts` filename convention. Returns `runAppAction` for invoking the action from the UI.
+- and more...
+
+Additional capabilities available through the API include:
+
+- Load/write the currently opened file
+- Invoke Pulse Editor agents
+- Use AI models
+- Use agentic tools installed in Pulse Editor
+
+**Skill**
+Skill definition is based on Anthropic's SKILL format with YAML frontmatter.
+
+**App Action**
+The `action.ts` file in each skill folder defines the App Action associated with the skill.
+It has the following requirements:
+
+- must define a default export function that takes an input object and returns an output object.
+- can define any input/output types as an object, as needed for the skill's functionality.
+- must use JSDoc comments to document the input parameters and output with @typedef and @property annotations.
+- must use JSDoc comments to document the function with a description and @param and @returns annotations.
+- do not use environment specific APIs (e.g. browser-only or Node.js-only) in the action function: for backend-specific logic, use server functions and fetch from action.ts; for frontend-specific logic, use React components and hooks in the UI and call the action via `runAppAction`.
+
+Example `action.ts` structure:
+
+```ts
+/**
+ * @typedef {Object} Input - The input parameters for the example action.
+ * @property {string} arg1 - The first argument for the example action.
+ * @property {number} [arg2] - The second argument for the example action (optional).
+ */
+type Input = {
+  arg1: string;
+  arg2?: number;
+};
+
+/**
+ * @typedef {Object} Output - The output of the example action.
+ * @property {string} result1 - The first result of the example action.
+ * @property {string} result2 - The second result of the example action.
+ */
+type Output = {
+  result1: string;
+  result2: string;
+};
+
+/**
+ * This is an example action function. You can replace this with your own action logic.
+ *
+ * @param {Input} input - The input parameters for the example action.
+ *
+ * @returns {Output} The output of the example action.
+ */
+export default function exampleSkill({ arg1, arg2 = 1 }: Input): Output {
+  return {
+    result1: `Received arg1: ${arg1}`,
+    result2: `Received arg2: ${arg2}`,
+  };
+}
+```
+
+**useActionEffect**
+Think of `useActionEffect` as a way to "link" an App Action to the frontend UI. It will have `beforeAction` and `afterAction` functions that pipe the action's input and output, allowing you to perform UI updates accordingly. Note that `beforeAction` and `afterAction` functionally behave like pipelines that process the args and optionally transform them before passing.
+They can also make side effects in the UI via React such as showing loading states, updating components, etc.
+It returns a `runAppAction` function that can be used to invoke the action from the frontend. 
+
+Trigger logic:
+- When the action is triggered from an AI agent in Pulse Editor, both `beforeAction` and `afterAction` will run.
+- When the action is triggered from workflow runner in Pulse Editor, both `beforeAction` and `afterAction` will run.
+- When the action is triggered directly by calling `runAppAction` from the frontend, neither `beforeAction` nor `afterAction` will run. This is because `runAppAction` is meant to be a direct invocation of the action logic without any additional processing. If you want to have similar UI updates as if the action is triggered from the frontend, you can manually add the same logic in the frontend before and after calling `runAppAction`.
+
+Example usage of `useActionEffect` in `main.tsx`:
+
+```tsx
+// This hook registers the exampleSkill action and allows workflow automation to
+// trigger the action in the frontend with beforeAction and afterAction to handle 
+// UI updates accordingly.
+const { runAppAction } = useActionEffect(
+  {
+    actionName: "exampleSkill",
+    // This will run only when the action is triggered via workflow runner in Pulse Editor.
+    beforeAction: async (args: any) => {
+      console.log("Before action, action's args:", args);
+      return args;
+    },
+    // This will run only when the action is triggered via workflow runner in Pulse Editor.
+    afterAction: async (result: any) => {
+      console.log("After action, action's result:", result);
+      return result;
+    },
+  },
+  [],
+);
+
+// Since runAppAction will not trigger beforeAction and afterAction when invoked directly from frontend,
+// you need to manually apply logics
+async function handleClick() {
+  // Add any logic before invoking the action, e.g. validating user input, showing loading states, etc.
+  console.log("Invoking exampleSkill action from the frontend with args...");
+  await runAppAction({ arg1: "Hello", arg2: 42 });
+  // Add any logic after invoking the action, e.g. showing success messages, updating the UI, etc.
+  console.log("Finished invoking exampleSkill action from the frontend");
+}
+```
