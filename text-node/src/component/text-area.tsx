@@ -38,7 +38,9 @@ export function TextArea() {
     {
       actionName: "input-output-text",
       beforeAction: async (args: { "input-text": string }) => {
-        const argInput = args["input-text"] ?? "";
+        const argInput = args["input-text"]
+          ? String(args["input-text"]).trim()
+          : "";
         const text = argInput.length > 0 ? argInput : input;
 
         setInput(text);
