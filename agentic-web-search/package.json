@@ -2,7 +2,7 @@
   "name": "agentic_web_search",
   "displayName": "Agentic Web Search",
   "description": "A template for creating Pulse App",
-  "version": "0.0.17",
+  "version": "0.0.18",
   "private": true,
   "type": "module",
   "scripts": {
@@ -17,8 +17,8 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.36.0",
-    "@pulse-editor/react-api": "^0.1.1-beta.85",
-    "@pulse-editor/shared-utils": "^0.1.1-beta.85",
+    "@pulse-editor/react-api": "^0.1.1-beta.86",
+    "@pulse-editor/shared-utils": "^0.1.1-beta.86",
     "cors": "^2.8.6",
     "dotenv": "^17.3.1",
     "openai": "^6.33.0",
@@ -28,7 +28,7 @@
     "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
-    "@pulse-editor/cli": "^0.1.9",
+    "@pulse-editor/cli": "^0.1.10",
     "@tailwindcss/postcss": "^4.2.0",
     "@tailwindcss/typography": "^0.5.19",
     "@types/cors": "^2.8.19",
