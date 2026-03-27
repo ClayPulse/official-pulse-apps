@@ -1,6 +1,6 @@
 /**
  * @typedef {Object} Input - The input parameters for the apply-template action.
- * @property {string} template - The prompt template string with {varName} placeholders.
+ * @property {string} template - The prompt template string with {varName} placeholders. Use \{ and \} for literal braces.
  * @property {Record<string, string>} variables - An object mapping variable names to their replacement values.
  */
 type Input = {
@@ -18,14 +18,26 @@ type Output = {
 
 /**
  * Replaces {varName} placeholders in a prompt template with values from the variables object.
+ * Use \{ and \} to include literal braces without triggering substitution.
  *
  * @param {Input} input - The template and variables to apply.
  *
  * @returns {Output} The result with placeholders replaced.
  */
 export default function applyTemplate({ template, variables }: Input): Output {
-  const result = template.replace(/\{(\w+)\}/g, (match, key) => {
+  // Temporarily replace escaped braces with placeholders
+  const escaped = template
+    .replace(/\\\{/g, "\x00OPEN\x00")
+    .replace(/\\\}/g, "\x00CLOSE\x00");
+
+  const substituted = escaped.replace(/\{(\w+)\}/g, (match, key) => {
     return key in variables ? variables[key] : match;
   });
+
+  // Restore escaped braces as literal characters
+  const result = substituted
+    .replace(/\x00OPEN\x00/g, "{")
+    .replace(/\x00CLOSE\x00/g, "}");
+
   return { result };
 }
