@@ -7,6 +7,7 @@ export default function Main() {
   const [content, setContent] = useState<string>("");
   const [generating, setGenerating] = useState(false);
   const [pdfBase64, setPdfBase64] = useState<string>("");
+  const [error, setError] = useState<string>("");
 
   useEffect(() => {
     if (isReady) {
@@ -20,6 +21,7 @@ export default function Main() {
       beforeAction: async (args: any) => {
         if (!args) return;
         setGenerating(true);
+        setError("");
         setContent(args.content || "");
         return args;
       },
@@ -37,13 +39,15 @@ export default function Main() {
     if (!content.trim()) return;
     setGenerating(true);
     setPdfBase64("");
+    setError("");
     try {
       const result = await runAppAction?.({ content });
       if (result?.pdf) {
         setPdfBase64(result.pdf);
       }
-    } catch (err) {
-      console.error("PDF generation failed:", err);
+    } catch (err: any) {
+      const message = err?.message || "PDF generation failed";
+      setError(message);
     } finally {
       setGenerating(false);
     }
@@ -95,6 +99,13 @@ export default function Main() {
           </button>
         )}
       </div>
+
+      {/* Error */}
+      {error && (
+        <div className="rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-3 text-sm text-red-300">
+          {error}
+        </div>
+      )}
 
       {/* Status */}
       {pdfBase64 && (
