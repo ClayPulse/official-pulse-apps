@@ -2,7 +2,12 @@ import React, { useEffect, useState } from "react";
 import "./tailwind.css";
 import { useLoading, useActionEffect } from "@pulse-editor/react-api";
 
-const LLM_MODELS = ["gpt-5.4", "gpt-5-mini"];
+const LLM_MODELS = [
+  "gpt-5.4",
+  "gpt-5-mini",
+  "claude-sonnet-4-6",
+  "claude-haiku-4-5-20251001",
+];
 
 export default function Main() {
   const { isReady, toggleLoading } = useLoading();
