@@ -2,7 +2,7 @@
   "name": "pdf_doc_generator",
   "displayName": "PDF Doc Generator",
   "description": "Generate PDF documents from text content",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "private": true,
   "type": "module",
   "scripts": {

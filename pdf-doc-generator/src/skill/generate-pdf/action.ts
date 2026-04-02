@@ -37,5 +37,5 @@ export default async function generatePdf({
   }
 
   const data = await response.json();
-  return { pdf: data.pdf };
+  return { pdf: `data:application/pdf;base64,${data.pdf}` };
 }
