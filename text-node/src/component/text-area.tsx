@@ -8,7 +8,7 @@ import {
 export function TextArea() {
   const { isReady, toggleLoading } = useLoading();
 
-  const [input, setInput] = useSnapshotState("input", "");
+  const [input, setInput] = useSnapshotState("input-text", "");
 
   useActionEffect(
     {
