@@ -236,7 +236,7 @@ function ReplicateApp() {
       if (!result) return result;
       setLoading(false);
       if (result.error) setError(result.error);
-      else setResult(result);
+      else setResult(result.artifactUrl);
       return result;
     },
   };
@@ -245,14 +245,6 @@ function ReplicateApp() {
     { actionName: "run-model", ...actionCallback },
     [],
   );
-  useActionEffect({ actionName: "generate-image", ...actionCallback }, []);
-  useActionEffect({ actionName: "image-tools", ...actionCallback }, []);
-  useActionEffect({ actionName: "kontext-apps", ...actionCallback }, []);
-  useActionEffect({ actionName: "generate-video", ...actionCallback }, []);
-  useActionEffect({ actionName: "video-tools", ...actionCallback }, []);
-  useActionEffect({ actionName: "generate-audio", ...actionCallback }, []);
-  useActionEffect({ actionName: "language-model", ...actionCallback }, []);
-  useActionEffect({ actionName: "generate-3d", ...actionCallback }, []);
 
   async function handleRun() {
     setLoading(true);
@@ -262,7 +254,7 @@ function ReplicateApp() {
       const parsedInput = JSON.parse(inputJson);
       const res = await runAppAction!({ model, input: parsedInput });
       if (res?.error) setError(res.error);
-      else setResult(res);
+      else setResult(res.artifactUrl);
     } catch (e: any) {
       setError(e.message || "Failed to run model");
     } finally {
@@ -276,13 +268,6 @@ function ReplicateApp() {
       .flatMap((c) => c.models)
       .find((m) => m.id === model)?.label || model;
 
-  const rawOutput = result?.output;
-  const outputItems: string[] = Array.isArray(rawOutput)
-    ? rawOutput.filter((v: any) => typeof v === "string")
-    : typeof rawOutput === "string"
-      ? [rawOutput]
-      : [];
-
   function looksLikeImageUrl(url: string): boolean {
     if (url.startsWith("data:image")) return true;
     if (!url.startsWith("http")) return false;
@@ -292,7 +277,7 @@ function ReplicateApp() {
     return false;
   }
 
-  const isImageOutput = outputItems.length > 0 && outputItems.every(looksLikeImageUrl);
+  const isImageOutput = typeof result === "string" && looksLikeImageUrl(result);
 
   return (
     <div className="flex flex-col w-full h-full overflow-hidden" style={{ color: "var(--gray-12)" }}>
@@ -439,56 +424,36 @@ function ReplicateApp() {
       {/* Output */}
       {result && (
         <div className="flex-1 min-h-0 flex flex-col overflow-auto px-3 pb-3 gap-2">
-          {result.metrics?.predict_time && (
-            <div
-              className="flex-shrink-0 flex items-center gap-2 px-3 py-2"
+          {isImageOutput && (
+            <img
+              src={result}
+              alt="Output"
+              className="max-w-full object-contain"
               style={{
-                background: "rgba(48,164,108,0.06)",
-                borderRadius: 8,
-                border: "1px solid rgba(48,164,108,0.15)",
-              }}
-            >
-              <span
-                className="inline-block w-2 h-2 rounded-full"
-                style={{ background: "var(--green-9)" }}
-              />
-              <span style={{ fontSize: 11, color: "var(--green-9)", fontWeight: 500 }}>
-                Completed in {result.metrics.predict_time.toFixed(2)}s
-              </span>
-            </div>
-          )}
-          {isImageOutput ? (
-            <div className="flex-1 min-h-0 flex flex-col gap-2">
-              {outputItems.map((url: string, i: number) => (
-                <img
-                  key={i}
-                  src={url}
-                  alt={`Output ${i}`}
-                  className="max-w-full max-h-full object-contain"
-                  style={{
-                    borderRadius: 12,
-                    boxShadow: "var(--elevation-2)",
-                  }}
-                />
-              ))}
-            </div>
-          ) : (
-            <pre
-              className="flex-1 min-h-0 overflow-auto whitespace-pre-wrap font-mono"
-              style={{
-                padding: 12,
-                fontSize: 11,
-                background: "var(--gray-2)",
-                border: "1px solid var(--gray-4)",
                 borderRadius: 12,
-                color: "var(--gray-12)",
+                boxShadow: "var(--elevation-2)",
               }}
-            >
-              {typeof result.output === "string"
-                ? result.output
-                : JSON.stringify(result.output, null, 2)}
-            </pre>
+            />
           )}
+          <a
+            href={result}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block truncate font-mono"
+            style={{
+              padding: "8px 10px",
+              fontSize: 11,
+              background: "var(--gray-2)",
+              border: "1px solid var(--gray-4)",
+              borderRadius: 10,
+              color: "var(--blue-9)",
+              textDecoration: "none",
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.textDecoration = "underline"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.textDecoration = "none"; }}
+          >
+            {result}
+          </a>
         </div>
       )}
 

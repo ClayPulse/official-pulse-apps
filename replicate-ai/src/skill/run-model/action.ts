@@ -10,27 +10,20 @@ type Input = {
 
 /**
  * @typedef {Object} Output - The output of the Replicate prediction.
- * @property {string} id - The prediction ID.
- * @property {string} status - The prediction status (succeeded, failed, canceled).
- * @property {any} output - The model output (format varies by model).
- * @property {Record<string, any>} [metrics] - Prediction metrics (run time, etc.).
+ * @property {string} artifactUrl - The URL of the prediction's primary output artifact.
  * @property {string} [error] - Error message if the prediction failed.
  */
 type Output = {
-  id: string;
-  status: string;
-  output: any;
-  metrics?: Record<string, any>;
+  artifactUrl: string;
   error?: string;
 };
 
 /**
- * Run any AI model on Replicate. Provide the model identifier and its input parameters.
- * The output format depends on the model (image URLs, text, audio URLs, etc.).
+ * Run any AI model on Replicate and return the artifact URL.
  *
  * @param {Input} input - The model identifier and input parameters.
  *
- * @returns {Promise<Output>} The prediction result from Replicate.
+ * @returns {Promise<Output>} The artifact URL from the prediction result.
  */
 export default async function runModel({ model, input }: Input): Promise<Output> {
   const res = await fetch("/server-function/run-prediction", {
@@ -43,17 +36,14 @@ export default async function runModel({ model, input }: Input): Promise<Output>
 
   if (!res.ok) {
     return {
-      id: data.prediction?.id ?? "",
-      status: "failed",
-      output: null,
+      artifactUrl: "",
       error: data.details || data.error || "Unknown error",
     };
   }
 
-  return {
-    id: data.id,
-    status: data.status,
-    output: data.output,
-    metrics: data.metrics,
-  };
+  // Extract the primary artifact URL from the output
+  const output = data.output;
+  const artifactUrl = Array.isArray(output) ? output[0] : typeof output === "string" ? output : "";
+
+  return { artifactUrl };
 }
