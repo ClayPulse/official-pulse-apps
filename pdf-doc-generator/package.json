@@ -2,7 +2,7 @@
   "name": "pdf_doc_generator",
   "displayName": "PDF Doc Generator",
   "description": "Generate PDF documents from text content",
-  "version": "0.0.5",
+  "version": "0.0.8",
   "private": true,
   "type": "module",
   "scripts": {
@@ -26,7 +26,7 @@
     "react-pdf-html": "^2.1.5"
   },
   "devDependencies": {
-    "@pulse-editor/cli": "^0.1.10",
+    "@pulse-editor/cli": "^0.1.12",
     "@tailwindcss/postcss": "^4.2.0",
     "@types/cors": "^2.8.19",
     "@types/react": "19.2.14",

@@ -119,13 +119,7 @@ export default function Main() {
   const { runAppAction: runSendMessage } = useActionEffect(
     {
       actionName: "send-message",
-      beforeAction: async (args: Record<string, unknown>) => {
-        return {
-          ...args,
-          accessToken: session?.accessToken,
-          phoneNumberId: session?.phoneNumberId,
-        };
-      },
+      beforeAction: async (args: Record<string, unknown>) => args,
       afterAction: async (result: Record<string, unknown>) => {
         if (result?.success) {
           const newMsg: Message = {
@@ -158,8 +152,7 @@ export default function Main() {
             from: result.from as string,
             text: result.text as string,
             name: result.name as string | undefined,
-            timestamp:
-              (result.timestamp as string) || new Date().toISOString(),
+            timestamp: (result.timestamp as string) || new Date().toISOString(),
             direction: "incoming",
           };
           setMessages((prev) => [...prev, newMsg]);
@@ -336,8 +329,6 @@ export default function Main() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          accessToken: session.accessToken,
-          phoneNumberId: session.phoneNumberId,
           to: recipientPhone,
           message: msgText,
         }),

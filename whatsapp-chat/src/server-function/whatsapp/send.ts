@@ -11,18 +11,22 @@ export default async function handler(req: Request): Promise<Response> {
     });
   }
 
-  const { accessToken, phoneNumberId, to, message } = await req.json();
+  const { to, message } = await req.json();
 
-  if (!accessToken) {
-    return new Response(JSON.stringify({ error: "Access token required" }), {
-      status: 400,
-      headers: { "Content-Type": "application/json" },
-    });
+  const session = JSON.parse(process.env.SESSION || "{}");
+  const accessToken = session.accessToken;
+  const phoneNumberId = session.phoneNumberId;
+
+  if (!accessToken || !phoneNumberId) {
+    return new Response(
+      JSON.stringify({ error: "Not authenticated. Please sign in via the WhatsApp Chat app first." }),
+      { status: 401, headers: { "Content-Type": "application/json" } },
+    );
   }
 
-  if (!phoneNumberId || !to || !message) {
+  if (!to || !message) {
     return new Response(
-      JSON.stringify({ error: "phoneNumberId, to, and message are required" }),
+      JSON.stringify({ error: "to and message are required" }),
       { status: 400, headers: { "Content-Type": "application/json" } },
     );
   }

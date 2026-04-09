@@ -1,33 +1,38 @@
 ---
 name: receive-message
-description: Process an incoming WhatsApp message received via webhook
+description: Process an incoming WhatsApp webhook payload and extract messages
 input_schema:
   type: object
   properties:
-    from:
+    object:
       type: string
-      description: The sender's phone number
-    text:
-      type: string
-      description: The message text content
-    name:
-      type: string
-      description: The sender's WhatsApp profile name
-    timestamp:
-      type: string
-      description: The message timestamp
-    messageId:
-      type: string
-      description: The WhatsApp message ID
+      description: The webhook object type (e.g. "whatsapp_business_account")
+    entry:
+      type: array
+      description: The webhook entry array containing changes
+      items:
+        type: object
+        properties:
+          id:
+            type: string
+          changes:
+            type: array
+            items:
+              type: object
+              properties:
+                field:
+                  type: string
+                value:
+                  type: object
   required:
-    - from
-    - text
+    - object
+    - entry
 ---
 
 # Receive WhatsApp Message
 
-Process an incoming WhatsApp message received via the webhook. This skill is triggered when a new message arrives through the WhatsApp Business API webhook.
+Process a raw WhatsApp Business API webhook payload and extract incoming messages. This skill is triggered when a new message arrives through the webhook.
 
 ## Usage
 
-This skill is typically triggered automatically by the webhook server function when a new message is received. It can also be invoked by an AI agent or workflow to process a specific incoming message.
+This skill is typically triggered automatically by the webhook server function when a new message is received. It can also be invoked by an AI agent or workflow to process a specific webhook payload.

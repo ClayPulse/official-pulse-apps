@@ -55,10 +55,21 @@ export default function Main() {
 
   function handleDownload() {
     if (!pdfBase64) return;
+    const raw = pdfBase64.includes(",") ? pdfBase64.split(",")[1] : pdfBase64;
+    const byteCharacters = atob(raw);
+    const byteArray = new Uint8Array(byteCharacters.length);
+    for (let i = 0; i < byteCharacters.length; i++) {
+      byteArray[i] = byteCharacters.charCodeAt(i);
+    }
+    const blob = new Blob([byteArray], { type: "application/pdf" });
+    const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
-    link.href = `data:application/pdf;base64,${pdfBase64}`;
+    link.href = url;
     link.download = "document.pdf";
+    document.body.appendChild(link);
     link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   }
 
   return (

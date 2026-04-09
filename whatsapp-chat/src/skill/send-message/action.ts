@@ -2,14 +2,10 @@
  * @typedef {Object} Input - The input parameters for sending a WhatsApp message.
  * @property {string} to - The recipient phone number in international format (e.g. 14155552671).
  * @property {string} message - The text message to send.
- * @property {string} [accessToken] - Optional OAuth access token (injected by frontend if available).
- * @property {string} [phoneNumberId] - Optional WhatsApp phone number ID (injected by frontend if available).
  */
 type Input = {
   to: string;
   message: string;
-  accessToken?: string;
-  phoneNumberId?: string;
 };
 
 /**
@@ -34,22 +30,12 @@ type Output = {
 export default async function sendMessage({
   to,
   message,
-  accessToken,
-  phoneNumberId,
 }: Input): Promise<Output> {
-  if (!accessToken || !phoneNumberId) {
-    return {
-      success: false,
-      error:
-        "Not authenticated. Please sign in via the WhatsApp Chat app first.",
-    };
-  }
-
   try {
     const res = await fetch("/server-function/whatsapp/send", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ accessToken, phoneNumberId, to, message }),
+      body: JSON.stringify({ to, message }),
     });
 
     const data = await res.json();

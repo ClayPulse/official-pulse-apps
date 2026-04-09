@@ -30,8 +30,13 @@ export default async function handler(req: Request): Promise<Response> {
         from: string;
         timestamp: string;
         text: string;
+        type: string;
         id: string;
         name?: string;
+        media?: { id: string; mime_type?: string; caption?: string; filename?: string };
+        location?: { latitude: number; longitude: number; name?: string; address?: string };
+        reaction?: { message_id: string; emoji: string };
+        interactive?: { type: string; button_reply?: { id: string; title: string }; list_reply?: { id: string; title: string; description?: string } };
       }> = [];
 
       if (body.entry) {
@@ -41,17 +46,70 @@ export default async function handler(req: Request): Promise<Response> {
             const value = change.value;
             const contacts = value?.contacts || [];
             for (const msg of value?.messages || []) {
-              if (msg.type === "text") {
-                const contact = contacts.find(
-                  (c: { wa_id: string }) => c.wa_id === msg.from,
-                );
-                messages.push({
-                  id: msg.id,
-                  from: msg.from,
-                  timestamp: msg.timestamp,
-                  text: msg.text?.body || "",
-                  name: contact?.profile?.name,
-                });
+              const contact = contacts.find(
+                (c: { wa_id: string }) => c.wa_id === msg.from,
+              );
+              const base = {
+                id: msg.id,
+                from: msg.from,
+                timestamp: msg.timestamp,
+                type: msg.type,
+                name: contact?.profile?.name,
+              };
+
+              switch (msg.type) {
+                case "text":
+                  messages.push({ ...base, text: msg.text?.body || "" });
+                  break;
+                case "image":
+                case "video":
+                case "audio":
+                case "document":
+                case "sticker":
+                  messages.push({
+                    ...base,
+                    text: msg[msg.type]?.caption || `[${msg.type}]`,
+                    media: {
+                      id: msg[msg.type]?.id,
+                      mime_type: msg[msg.type]?.mime_type,
+                      caption: msg[msg.type]?.caption,
+                      filename: msg[msg.type]?.filename,
+                    },
+                  });
+                  break;
+                case "location":
+                  messages.push({
+                    ...base,
+                    text: msg.location?.name || `[Location: ${msg.location?.latitude}, ${msg.location?.longitude}]`,
+                    location: msg.location,
+                  });
+                  break;
+                case "reaction":
+                  messages.push({
+                    ...base,
+                    text: msg.reaction?.emoji || "",
+                    reaction: msg.reaction,
+                  });
+                  break;
+                case "interactive":
+                  messages.push({
+                    ...base,
+                    text:
+                      msg.interactive?.button_reply?.title ||
+                      msg.interactive?.list_reply?.title ||
+                      "[interactive]",
+                    interactive: msg.interactive,
+                  });
+                  break;
+                case "contacts":
+                  messages.push({
+                    ...base,
+                    text: `[Contact: ${msg.contacts?.[0]?.name?.formatted_name || "Unknown"}]`,
+                  });
+                  break;
+                default:
+                  messages.push({ ...base, text: `[${msg.type || "unknown"}]` });
+                  break;
               }
             }
           }

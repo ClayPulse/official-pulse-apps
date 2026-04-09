@@ -1,8 +1,8 @@
 {
-  "name": "whatsapp_chat",
-  "displayName": "WhatsApp Chat",
-  "description": "Send and receive WhatsApp messages via the WhatsApp Business Cloud API",
-  "version": "0.0.6",
+  "name": "notion_integration",
+  "displayName": "Notion Integration",
+  "description": "Read, write, and browse Notion pages from Pulse Editor",
+  "version": "0.0.1",
   "private": true,
   "type": "module",
   "scripts": {
@@ -16,6 +16,7 @@
     "clean": "pulse clean"
   },
   "dependencies": {
+    "@notionhq/client": "^5.16.0",
     "@pulse-editor/react-api": "^0.1.1-beta.86",
     "@pulse-editor/shared-utils": "^0.1.1-beta.86",
     "cors": "^2.8.6",

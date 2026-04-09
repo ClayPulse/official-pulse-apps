@@ -2,7 +2,7 @@
   "name": "llm_node",
   "displayName": "LLM Node",
   "description": "A template for creating Pulse App",
-  "version": "0.0.14",
+  "version": "0.0.15",
   "private": true,
   "type": "module",
   "scripts": {
@@ -29,7 +29,7 @@
     "react-dom": "19.2.4"
   },
   "devDependencies": {
-    "@pulse-editor/cli": "^0.1.10",
+    "@pulse-editor/cli": "^0.1.12",
     "@tailwindcss/postcss": "^4.2.1",
     "@types/cors": "^2.8.19",
     "@types/react": "19.2.14",
